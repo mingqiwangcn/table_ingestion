@@ -33,7 +33,8 @@ def truncate(tokenizer, text, max_size):
 
 def preprocess_schema(tokenizer, table_data):
     title = table_data['document_title'].strip()
-    table_data['document_title'] = truncate(tokenizer, title, Max_Title_Size) 
+    table_data['document_title'] = truncate(tokenizer, title, Max_Title_Size)
+    table_data['title_size'] = len(tokenizer.tokenize(table_data['document_title']))
 
     col_data = table_data['columns']
     for col_info in cell_data:
