@@ -1,5 +1,6 @@
 import util
 from context_window import ContextWindow
+import transformers
 
 class TableSerializer:
     def __init__(self):
@@ -7,14 +8,22 @@ class TableSerializer:
         wnd_size = util.get_context_window_size(self.tokenizer)
         self.serial_window = ContextWindow(self.tokenizer, wnd_size) 
 
-    def serialize(table_data):
+    def serialize(self, table_data):
         util.preprocess_schema(self.tokenizer, table_data)
-        col_data = table_data['cols']
         row_data = table_data['rows']
-        for row_item in row_data:
-            cell_lst = row_item['cells']
-            for col_idx, cell_info in enumerate(cell_lst):
-                col_info = col_data[col_idx]
-
-                
+        row_cnt = len(row_data)
+        col_cnt = len(table_data['columns'])
+        for row in range(row_cnt):
+            util.preprocess_row(self.tokenizer, row_data[row])
+            for col in range(col_cnt):
+                if (self.serial_window.can_add(table_data, row, col)):
+                    self.serial_window.add(table_data, row, col)
+                else:
+                    serial_block = self.serial_window.pop(table_data)
+                    yield serial_block
+                    self.serial_window.add(table_data, row, col)
+        
+        if self.serial_window.can_pop():
+            serial_block = self.serial_window.pop(table_data)
+            yield serial_block
 

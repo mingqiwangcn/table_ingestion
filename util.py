@@ -1,16 +1,6 @@
-import transformers
-import src.model
-
 Max_Title_Size = 60
 Max_Col_Header_Size = 30
 Max_Cell_Size = 100
-
-def get_encode_model(model_path, device):
-    model = src.model.Retriever.from_pretrained(model_path) 
-    model.eval()
-    model = model.to(device)
-    model = model.half() #fp16
-    return model
 
 # window size is determined by the encoder
 def get_context_window_size(tokenizer):
@@ -22,26 +12,32 @@ def get_context_window_size(tokenizer):
     #for the encoder, max_seq_length (incuding prefix, user text, [cls] and [SEP]) = 455 + 4 + 2 = 461 
     return wnd_size 
 
+def wrap_text(text):
+    if len(text.split()) > 1:
+        text = '"' + text + '"'
+    return text
+
 def truncate(tokenizer, text, max_size):
     tokens = tokenizer.tokenize(text)
-    if len(tokens > max_size):
+    if len(tokens) > max_size:
         updated_tokens = tokens[:max_size]
-        updated_text = tokenize.decode(tokenizer.convert_tokens_to_ids(updated_tokens))
+        updated_text = tokenizer.decode(tokenizer.convert_tokens_to_ids(updated_tokens))
     else:
         updated_text = text
-    return updated_text
+    return wrap_text(updated_text)
 
 def preprocess_schema(tokenizer, table_data):
-    title = table_data['document_title'].strip()
-    table_data['document_title'] = truncate(tokenizer, title, Max_Title_Size)
-    table_data['title_size'] = len(tokenizer.tokenize(table_data['document_title']))
+    title_key = 'documentTitle'
+    title = table_data[title_key].strip()
+    table_data[title_key] = truncate(tokenizer, title, Max_Title_Size)
+    table_data['title_size'] = len(tokenizer.tokenize(table_data[title_key]))
 
     col_data = table_data['columns']
-    for col_info in cell_data:
+    for col_info in col_data:
         text = col_info['text'].strip()
         col_info['text'] = truncate(tokenizer, text, Max_Col_Header_Size)
 
-def preprocess_row(row_item):
+def preprocess_row(tokenizer, row_item):
     cell_lst = row_item['cells']
     for cell_info in cell_lst:
         text = cell_info['text'].strip()
