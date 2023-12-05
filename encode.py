@@ -37,7 +37,7 @@ def encode_blocks(work_dir, block_file, config):
 def main():
     args = get_args()
     config = read_config()
-    block_file = './data/nyc_open_1000/passages.jsonl'
+    block_file = './data/chicago_open/passages.jsonl'
     encode_blocks(args.work_dir, block_file, config)
 
 def get_args():

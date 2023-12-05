@@ -5,7 +5,7 @@ from serial import TableSerializer
 from multiprocessing import Pool as ProcessPool
 
 def read_tables():
-    data_file = '/home/cc/code/solo_work/data/nyc_open_1000/tables/tables.jsonl'
+    data_file = '/home/cc/code/solo_work/data/chicago_open/tables/tables.jsonl'
     table_lst = []
     with open(data_file) as f:
         for line in tqdm(f):
@@ -26,7 +26,7 @@ def process_table(arg_info):
 
 def main():
     block_id = 0
-    out_file = './output/nyc_1000_passages.jsonl'
+    out_file = './data/chicago_open/passages.jsonl'
     if os.path.exists(out_file):
         answer = input('(%s) already exists. Continue?(y/n)' % out_file)
         if answer != 'y':
