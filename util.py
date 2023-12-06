@@ -17,6 +17,9 @@ def wrap_text(text):
         text = '"' + text + '"'
     return text
 
+def get_token_size(tokenizer, text):
+    return len(tokenizer.tokenize(text))
+
 def truncate(tokenizer, text, max_size):
     tokens = tokenizer.tokenize(text)
     if len(tokens) > max_size:

@@ -1,7 +1,7 @@
 import json
 from tqdm import tqdm
 import os
-from serial import TableSerializer
+from serial import BlockSerializer
 from multiprocessing import Pool as ProcessPool
 
 def read_tables():
@@ -15,7 +15,7 @@ def read_tables():
 
 def init_worker():
     global tsl
-    tsl = TableSerializer()
+    tsl = BlockSerializer()
 
 def process_table(arg_info):
     table_data = arg_info['table_data']
