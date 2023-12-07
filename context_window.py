@@ -7,16 +7,14 @@ class ContextWindow:
         self.buffer_size = 0
         self.text_buffer = []
     
-    def can_add(self, table_data, row_idx, col_idx):
+    def can_add(self, table_data, row_idx, col_idx, serial_text):
         #import pdb; pdb.set_trace()
         cell_info = table_data['rows'][row_idx]['cells'][col_idx]
         col_data = table_data['columns']
         col_info = col_data[col_idx]
         is_last_cell = (col_idx + 1 == len(col_data))
-        sep_token = ';' if not is_last_cell else self.tokenizer.sep_token
-        text = col_info['text'] + ' ' + cell_info['text'] + ' ' + sep_token + ' '
-        token_size = util.get_token_size(self.tokenizer, text)
-        cell_info['serial_text'] = text
+        token_size = util.get_token_size(self.tokenizer, serial_text)
+        cell_info['serial_text'] = serial_text
         cell_info['serial_size'] = token_size
         cell_info['is_last_cell'] = int(is_last_cell)
         cell_info['row'] = row_idx

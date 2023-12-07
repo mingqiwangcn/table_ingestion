@@ -45,4 +45,28 @@ def preprocess_row(tokenizer, row_item):
     for cell_info in cell_lst:
         text = cell_info['text'].strip()
         cell_info['text'] = truncate(tokenizer, text, Max_Cell_Size)
-    
+
+def is_float(text):
+    assert text.strip() != ''
+    if '.' not in text:
+        return False
+    if re.match(r'^-?\d+(?:\.\d+)$', text) is None:
+        return False
+    return True
+
+def is_int(text):
+    strip_text = text.strip()
+    assert strip_text != ''
+    if strip_text[0] in ['-', '+']:
+        return strip_text[1].isdigit()
+    else:
+        return strip_text.isdigit()
+
+def is_bool(text):
+    assert text.strip() != ''
+    if text.strip().lower() in ['true', 'false']:
+        return True
+    else:
+        return False
+
+

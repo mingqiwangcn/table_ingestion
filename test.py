@@ -1,11 +1,13 @@
 import json
 from tqdm import tqdm
 import os
-from serial import BlockSerializer
+from serial_block import BlockSerializer
+from serial_compress import CompressSerializer 
 from multiprocessing import Pool as ProcessPool
+import argparse
 
-def read_tables():
-    data_file = '/home/cc/code/solo_work/data/chicago_open/tables/tables.jsonl'
+def read_tables(args):
+    data_file = '../data/%s/tables/tables.jsonl' % args.dataset
     table_lst = []
     with open(data_file) as f:
         for line in tqdm(f):
@@ -13,9 +15,14 @@ def read_tables():
             table_lst.append(table_data)
     return table_lst
 
-def init_worker():
+def init_worker(args):
     global tsl
-    tsl = BlockSerializer()
+    if args.strategy == 'block':
+        tsl = BlockSerializer()
+    elif args.strategy == 'compress':
+        tsl = CompressSerializer()
+    else:
+        raise ValueError('Strategy (%s) not supported.' % args.strategy)
 
 def process_table(arg_info):
     table_data = arg_info['table_data']
@@ -25,8 +32,12 @@ def process_table(arg_info):
     return block_lst
 
 def main():
+    args = get_args()
     block_id = 0
-    out_file = './data/chicago_open/passages.jsonl'
+    out_dir = './data/%s/%s' % (args.dataset, args.strategy)
+    if not os.path.isdir(out_dir):
+        os.makedirs(out_dir)
+    out_file = os.path.join(out_dir, 'passages.jsonl')
     if os.path.exists(out_file):
         answer = input('(%s) already exists. Continue?(y/n)' % out_file)
         if answer != 'y':
@@ -34,7 +45,7 @@ def main():
     f_o = open(out_file, 'w')
 
     print('Loading tables')
-    table_lst = read_tables()
+    table_lst = read_tables(args)
     arg_info_lst = []
     for table_data in table_lst:
         arg_info = {
@@ -42,15 +53,31 @@ def main():
         }
         arg_info_lst.append(arg_info)
 
-    work_pool = ProcessPool(initializer=init_worker)
-    
-    for table_block_lst in tqdm(work_pool.imap_unordered(process_table, arg_info_lst), total=len(table_lst)):
-        for serial_block in table_block_lst:
-            serial_block['p_id'] = block_id
-            block_id += 1
-            f_o.write(json.dumps(serial_block) + '\n')
-
+    if not args.debug:
+        work_pool = ProcessPool(initializer=init_worker, initargs=(args, ))
+        for table_block_lst in tqdm(work_pool.imap_unordered(process_table, arg_info_lst), total=len(table_lst)):
+            for serial_block in table_block_lst:
+                serial_block['p_id'] = block_id
+                block_id += 1
+                f_o.write(json.dumps(serial_block) + '\n')
+    else:
+        init_worker(args)
+        for arg_info in tqdm(arg_info_lst):
+            table_block_lst = process_table(arg_info)
+            for serial_block in table_block_lst:
+                serial_block['p_id'] = block_id
+                block_id += 1
+                f_o.write(json.dumps(serial_block) + '\n')
+            
     f_o.close()
+
+def get_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dataset', type=str, required=True)
+    parser.add_argument('--strategy', type=str, required=True)
+    parser.add_argument('--debug', type=int)
+    args = parser.parse_args()
+    return args
 
 if __name__ == '__main__':
     main()
