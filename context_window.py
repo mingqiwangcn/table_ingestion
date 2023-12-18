@@ -41,8 +41,8 @@ class ContextWindow:
     def pop(self, table_data):
         assert(len(self.text_buffer) > 0)
         text_lst = [a['serial_text'] for a in self.text_buffer]
-        out_text = self.schema_size + ''.join(text_lst)
-        out_size = self.schema_text + self.buffer_size
+        out_text = self.schema_text + ''.join(text_lst)
+        out_size = self.schema_size + self.buffer_size
         out_data = {
             'passage':out_text,
             'tag':{

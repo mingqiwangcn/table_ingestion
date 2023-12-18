@@ -7,10 +7,6 @@ class TableSerializer:
         self.tokenizer = transformers.BertTokenizerFast.from_pretrained('bert-base-uncased')
         wnd_size = util.get_context_window_size(self.tokenizer)
         self.serial_window = ContextWindow(self.tokenizer, wnd_size) 
-        self.init_special()
-
-    def init_special():
-        return
 
     def get_serial_text(self, table_data, row, col):
         return ''
