@@ -20,7 +20,7 @@ class BlockSerializer(TableSerializer):
         return title 
 
     def do_serialize(self, table_data):
-        schema_text = se;f.get_schema_text(table_data)
+        schema_text = self.get_schema_text(table_data)
         self.serial_window.set_schema_text(schema_text)
 
         row_data = table_data['rows']

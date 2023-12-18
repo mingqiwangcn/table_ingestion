@@ -14,13 +14,40 @@ def get_context_window_size(tokenizer):
     #for the encoder, max_seq_length (incuding prefix, user text, [cls] and [SEP]) = 455 + 4 + 2 = 461 
     return wnd_size 
 
-def split_columns(table_data, wnd_size):
+def split_columns(tokenizer, table_data, wnd_size):
     col_data = table_data['columns']
-    column_block_lst = []
+    block_lst = []
+    block_cols = []
+    block_text = ''
+    block_size = 0
     max_size = int(wnd_size * Max_Header_Meta_Ratio)
-    for col_info in col_data:
-        col_text = col_info['text']  
+    for offset, col_info in enumerate(col_data):
+        col_name = col_info['text'] 
+        serial_text = col_name + ' ' + tokenizer.sep_token 
+        serial_size = get_token_size(tokenizer, serial_text)
+        if block_size + serial_size <= max_size:
+            block_cols.append(offset)
+            block_text += ' ' + serial_text
+            block_size += serial_size
+        else:
+            block_info = {
+                'cols':block_cols,
+                'text':block_text,
+                'size':block_size
+            }
+            block_lst.append(block_info)
+            block_cols = [offset]
+            block_text = serial_text
+            block_size = serial_size
 
+    if block_size > 0:
+        block_info = {
+            'cols':block_cols,
+            'text':block_text,
+            'size':block_size
+        }
+        block_lst.append(block_info)
+    return block_lst
 
 def wrap_text(text):
     if len(text.split()) > 1:
