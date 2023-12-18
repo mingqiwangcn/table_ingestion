@@ -1,6 +1,8 @@
 Max_Title_Size = 60
 Max_Col_Header_Size = 30
 Max_Cell_Size = 100
+Max_Header_Meta_Ratio = 0.2 # {sum of header meta tokens} / {window size}
+MAX_WND_COLS = 20
 
 # window size is determined by the encoder
 def get_context_window_size(tokenizer):

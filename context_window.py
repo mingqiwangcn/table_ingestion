@@ -19,11 +19,11 @@ class ContextWindow:
         cell_info['is_last_cell'] = int(is_last_cell)
         cell_info['row'] = row_idx
         cell_info['col'] = col_idx
-        title_prefix_size = table_data['title_size'] + 1 
+        title_prefix_size = table_data['title_size'] + 1 # 1 token for [SEP] 
         if title_prefix_size + self.buffer_size + token_size > self.wnd_size:
             return False
         return True
-    
+   
     def add(self, table_data, row_idx, col_idx):
         cell_info = table_data['rows'][row_idx]['cells'][col_idx]
         token_size = cell_info['serial_size']
