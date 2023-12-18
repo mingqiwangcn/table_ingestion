@@ -6,9 +6,14 @@ class ContextWindow:
         self.wnd_size = wnd_size
         self.buffer_size = 0
         self.text_buffer = []
-    
+        self.schema_text = ''
+        self.schema_size = 0
+
+    def set_schema_text(self, text):
+        self.schema_text = text
+        self.schema_size = util.get_token_size(self.tokenizer, self.schema_text)
+
     def can_add(self, table_data, row_idx, col_idx, serial_text):
-        #import pdb; pdb.set_trace()
         cell_info = table_data['rows'][row_idx]['cells'][col_idx]
         col_data = table_data['columns']
         col_info = col_data[col_idx]
@@ -19,8 +24,8 @@ class ContextWindow:
         cell_info['is_last_cell'] = int(is_last_cell)
         cell_info['row'] = row_idx
         cell_info['col'] = col_idx
-        title_prefix_size = table_data['title_size'] + 1 # 1 token for [SEP] 
-        if title_prefix_size + self.buffer_size + token_size > self.wnd_size:
+        
+        if self.schema_size + self.buffer_size + token_size > self.wnd_size:
             return False
         return True
    
@@ -36,8 +41,8 @@ class ContextWindow:
     def pop(self, table_data):
         assert(len(self.text_buffer) > 0)
         text_lst = [a['serial_text'] for a in self.text_buffer]
-        out_text = table_data['documentTitle'] + ' ' + self.tokenizer.sep_token + ' ' + ''.join(text_lst)
-        out_size = table_data['title_size'] + 1 + self.buffer_size
+        out_text = self.schema_size + ''.join(text_lst)
+        out_size = self.schema_text + self.buffer_size
         out_data = {
             'passage':out_text,
             'tag':{

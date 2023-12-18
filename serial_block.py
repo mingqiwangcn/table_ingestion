@@ -15,7 +15,14 @@ class BlockSerializer(TableSerializer):
        serial_text = col_info['text'] + ' ' + cell_info['text'] + ' ' + sep_token + ' ' 
        return serial_text
 
+    def get_schema_text(self, table_data):
+        title = table_data['documentTitle'] + ' ' + self.tokenizer.sep_token
+        return title 
+
     def do_serialize(self, table_data):
+        schema_text = se;f.get_schema_text(table_data)
+        self.serial_window.set_schema_text(schema_text)
+
         row_data = table_data['rows']
         row_cnt = len(row_data)
         col_cnt = len(table_data['columns'])
