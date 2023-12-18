@@ -17,11 +17,8 @@ class SchemaSerializer(TableSerializer):
    
     def do_serialize(self, table_data):
         schema_block_lst = util.split_columns(self.tokenizer, table_data, self.serial_window.wnd_size)
-        if len(schema_block_lst) > 1:
-            import pdb; pdb.set_trace()
-            print('column split')
         for schema_block in schema_block_lst:
-            return self.serialize_schema_block(table_data, schema_block) 
+            yield from self.serialize_schema_block(table_data, schema_block) 
   
     def get_schema_text(self, table_data, schema_block):
         schema_text = table_data['documentTitle'] + ' ' + self.tokenizer.sep_token + schema_block['text']
