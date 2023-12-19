@@ -70,7 +70,6 @@ def main():
         init_worker(args)
         for arg_info in tqdm(arg_info_lst):
             table_block_lst = process_table(arg_info)
-            import pdb; pdb.set_trace()
             for serial_block in table_block_lst:
                 serial_block['p_id'] = block_id
                 block_id += 1

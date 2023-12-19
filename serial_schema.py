@@ -48,7 +48,6 @@ class SchemaSerializer(TableSerializer):
         return block_lst
     
     def get_block_info(self, block_cols, block_text, block_size):
-        import pdb; pdb.set_trace()
         assert block_text[-1] == ';'
         updated_block_text = block_text[:-1] + self.tokenizer.sep_token
         block_info = {
