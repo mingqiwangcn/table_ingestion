@@ -5,4 +5,4 @@ fi
 python test.py \
    --dataset $1 \
    --strategy $2 \
-   --debug 1 
+   --debug 0 
