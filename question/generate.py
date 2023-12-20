@@ -1,7 +1,9 @@
+import os
 import argparse
 from tqdm import tqdm
 import json
 from chatgpt_questions import ChatGptGenerator
+import pandas as pd
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -21,9 +23,51 @@ def read_tables(args):
 
 def main():
     args = get_args()
+    out_dir = f'./output/{args.dataset}'
+    if not os.path.isdir(out_dir):
+        os.makedirs(out_dir)
+    out_col_names = ['id', 'table_id', 'table_title', 'question', 
+                     'answer_row', 'answer_row(grid)', 
+                     'answer_col', 'answer_col(grid)', 
+                     'where cols', 'where_cols(grid)']
     table_iterator = read_tables(args)
     generator = ChatGptGenerator('./prompt')
-    generator.generate_questions(table_iterator)
+    for table_sql_lst in generator.generate_questions(table_iterator):
+        import pdb; pdb.set_trace()
+        if len(table_sql_lst) == 0:
+            continue
+        out_data = []
+        table_id = table_sql_lst[0]['meta']['table_id']
+        out_file = os.path.join(out_dir, f'questions_{table_id}.csv')
+        for sql_info in table_sql_lst:
+            meta_info = sql_info['meta']
+            out_item = [
+                        sql_info['id'],
+                        meta_info['table_id'],
+                        meta_info['title'],
+                        sql_info['question'],
+                        meta_info['row'],
+                        meta_info['row'] + 2,
+                        meta_info['sel_col'],
+                        numer_to_letter(meta_info['sel_col'] + 1),
+                        meta_info['where_cols'],
+                        [numer_to_letter(a+1) for a in meta_info['where_cols']]
+            ] 
+            out_data.append(out_item)
+
+        df = pd.DataFrame(data=out_data, columns=out_col_names)
+        df.to_csv(out_file)
+
+#col_no start from 1
+def numer_to_letter(col_no):
+    col = col_no
+    col_str = ""
+    while col > 0:
+        a = int((col - 1) / 26)
+        b = (col -1) % 26
+        col_str = chr(b + 65) + col_str
+        col = a
+    return col_str 
 
 if __name__ == '__main__':
     main()

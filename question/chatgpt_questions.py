@@ -7,6 +7,7 @@ import glob
 from table_ingestion import util
 import gpt
 from openai import OpenAI
+import uuid
 
 class SqlOP:
     eq = '=',
@@ -38,7 +39,7 @@ class ChatGptGenerator:
         self.sql_op_lst = [SqlOP.eq, SqlOP.greater, SqlOP.less, SqlOP.between]
         
     def init_prompt(self, prompt_dir):
-        file_pattern = os.path.join(prompt_dir, '*.pmt')
+        file_pattern = os.path.join(prompt_dir, 'general.pmt')
         prompt_file_lst = glob.glob(file_pattern)
         self.start_prompt_lst = []
         for prompt_file in prompt_file_lst:
@@ -152,19 +153,15 @@ class ChatGptGenerator:
             row_item = row_data[row]
             if not self.col_data_complete(row_item, where_cols):
                 continue
-
             select_part_sql = f'select {sel_col_name} '
             sel_infer_type = col_data[sel_col].get('infer_type', None)
             if sel_infer_type in (util.CellDataType.INT, util.CellDataType.FLOAT):
                 aggr_op = random.sample(aggr_op_lst_numeric, 1)[0]
             else:
                 aggr_op = random.sample(aggr_op_lst_general, 1)[0]
-
             if aggr_op is not None:
                select_part_sql = f'select {aggr_op}({sel_col_name}) '   
-            
             where_part_sql = ''
-            
             for offset, w_col in enumerate(where_cols):
                 w_col_name = where_col_names[offset]
                 col_cell_text = row_item['cells'][w_col]['gpt_text']
@@ -172,18 +169,17 @@ class ChatGptGenerator:
                 where_part_sql += self.get_where_sql(w_col_name, col_type, col_cell_text) 
                 if offset < (len(where_cols) - 1):
                     where_part_sql += ' and '
-            
             sql = select_part_sql + ' where ' + where_part_sql
             meta = {
                 'table_id':table_data['tableId'],
+                'title':table_data['documentTitle'],
                 'row':row,
                 'sel_col':sel_col,
                 'sel_col_name':sel_col_name,
                 'where_cols':where_cols,
                 'where_col_names':where_col_names
             }
-            
-            sql_info = {'sql':sql, 'meta':meta}
+            sql_info = {'id':str(uuid.uuid4()), 'sql':sql, 'meta':meta}
             sql_info_lst.append(sql_info)
         
         return sql_info_lst
@@ -264,9 +260,24 @@ class ChatGptGenerator:
 
     def generate_questions(self, table_iterator):
         for table_data in table_iterator: 
-            for prompt_name in self.start_prompt_lst:
-                table_prompt, sql_info_lst = self.get_table_prompt(prompt_name, table_data)
-                self.messages[-1]['content'] = table_prompt
-                response = gpt.chat_complete(self.client, self.messages) 
-
+            prompt_name = self.start_prompt_lst[0]
+            table_prompt, sql_info_lst = self.get_table_prompt(prompt_name, table_data)
+            self.messages[-1]['content'] = table_prompt
+            response = gpt.chat_complete(self.client, self.messages) 
+           
+            table_sql_lst = []
+            out_text_lst = response.split('\n')
+            for line in out_text_lst:
+                offset = line.find('.')
+                if offset < 0:
+                    continue
+                q_no = int(line[:offset])
+                sql_info = sql_info_lst[q_no - 1]
+                question = line[offset:].strip()
+                if (question[0] == '"') and (question[-1] == '"'):
+                    question = question[1:-1]
+                sql_info['question'] = question
+                table_sql_lst.append(sql_info)
+            
+            yield table_sql_lst
 
