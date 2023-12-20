@@ -29,11 +29,11 @@ def chat_complete(client, messages, temperature=0):
     wait_seconds = 3
     while response is None:
         try:
-            print(prompt)
+            print('\n' + prompt)
             print('-'*100)
             response = call_gpt(client, messages, temperature)
             print(response)
-            input('\nNext\n')
+            input('\nNext ? ')
         except openai.RateLimitError as err:
             response = None
             retry_cnt += 1

@@ -1,10 +1,1 @@
-You need to ask 4 questions given the following table with table caption and table data
-Instructions:
-1) For each question, generate SQL from the table first and then translate the SQL to natural language question
-2) Use 1 column in "select" clause
-3) Use 1 predicates in "where" clause for question 1 and 2 and use 2 predicates for question 3 and 4
-4) Do not contain "from table" clause in SQL 
-5) Each output should be in the following format
-   No. {output number}
-   SQL: {SQL}
-   Question: {question}
+You are given 1) a table with table caption and table data 2) some sql staements form this table. You need to translate these sqls into natural language questions.

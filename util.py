@@ -1,3 +1,5 @@
+import re
+
 Max_Title_Size = 60
 Max_Col_Header_Size = 30
 Max_Cell_Size = 100
@@ -104,6 +106,6 @@ def infer_col_type(table_data):
                 col_info['infer_type'] = CellDataType.BOOL
             elif all(type_lst == CellDataType.INT):
                 col_info['infer_type'] = CellDataType.INT
-            elif all([a in (CellDataType.FLOAT, CellDataType.INT) for a in type_lst])
+            elif all([a in (CellDataType.FLOAT, CellDataType.INT) for a in type_lst]):
                 col_info['infer_type'] = CellDataType.FLOAT
 
