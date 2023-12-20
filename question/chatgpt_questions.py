@@ -8,6 +8,12 @@ from table_ingestion import util
 import gpt
 from openai import OpenAI
 
+class SqlOP:
+    eq = '=',
+    greater = '>',
+    less = '<',
+    between = 'between and'
+
 class ChatGptGenerator:
     def __init__(self, prompt_file):
         self.buffer = []
@@ -29,6 +35,8 @@ class ChatGptGenerator:
         f_log = open(log_file, 'a')
         gpt.set_logger(f_log)
 
+        self.sql_op_lst = [SqlOP.eq, SqlOP.greater, SqlOP.less, SqlOP.between]
+        
     def init_prompt(self, prompt_dir):
         file_pattern = os.path.join(prompt_dir, '*.pmt')
         prompt_file_lst = glob.glob(file_pattern)
@@ -108,6 +116,13 @@ class ChatGptGenerator:
                 cell_info['gpt_text'] = gpt_text
          
 
+    def col_data_complete(self, row_item, col_lst):
+        for col in col_lst:
+            cell_text = row_item['cells'][col]['gpt_text'] 
+            if cell_text == '':
+                return False
+        return True
+
     def sample_sql(self, table_data, sample_size):
         row_data = table_data['rows']
         row_lst = list(range(len(row_data)))
@@ -119,7 +134,12 @@ class ChatGptGenerator:
         if max(num_sql_col_lst) < 3:
             num_sql_col_lst = [2]
         sql_info_lst = []
+        max_try = sample_size * 100
+        num_try = 0
         while (len(sql_info_lst) < sample_size):
+            if num_try > max_try:
+                break
+            num_try += 1
             num_col_sample = random.sample(num_sql_col_lst, 1)[0]
             col_samples = random.sample(col_lst, num_col_sample)
             
@@ -130,10 +150,12 @@ class ChatGptGenerator:
             
             row = random.sample(row_lst, 1)[0]
             row_item = row_data[row]
+            if not self.col_data_complete(row_item, where_cols):
+                continue
 
             select_part_sql = f'select {sel_col_name} '
-            infer_type = col_data[sel_col].get('infer_type', None)
-            if infer_type in (util.CellDataType.INT, util.CellDataType.FLOAT):
+            sel_infer_type = col_data[sel_col].get('infer_type', None)
+            if sel_infer_type in (util.CellDataType.INT, util.CellDataType.FLOAT):
                 aggr_op = random.sample(aggr_op_lst_numeric, 1)[0]
             else:
                 aggr_op = random.sample(aggr_op_lst_general, 1)[0]
@@ -146,12 +168,12 @@ class ChatGptGenerator:
             for offset, w_col in enumerate(where_cols):
                 w_col_name = where_col_names[offset]
                 col_cell_text = row_item['cells'][w_col]['gpt_text']
-                where_part_sql += f"{w_col_name} = '{col_cell_text}'"
+                col_type = col_data[w_col].get('infer_type', None)
+                where_part_sql += self.get_where_sql(w_col_name, col_type, col_cell_text) 
                 if offset < (len(where_cols) - 1):
                     where_part_sql += ' and '
             
             sql = select_part_sql + ' where ' + where_part_sql
-            
             meta = {
                 'table_id':table_data['tableId'],
                 'row':row,
@@ -165,6 +187,32 @@ class ChatGptGenerator:
             sql_info_lst.append(sql_info)
         
         return sql_info_lst
+
+    def get_where_sql(self, col_name, col_type, cell_text):
+        if col_type in [util.CellDataType.INT, util.CellDataType.FLOAT]:
+            op = random.sample(self.sql_op_lst, 1)[0] 
+            cell_value = float(cell_text)
+            threshold_int = ramdom.sample(list(range(10)), 1)[0]
+            threshold_float = threshold_int / 10
+            if col_type == util.CellDataType.INT:
+                threshold = threshold_int
+            else:
+                threshold = threshold_float
+            if op == SqlOP.greater:
+                rel_value = cell_value - threshold
+                where_sql = f'{col_name} {op} {threshold}'
+            elif op == SqlOP.less:
+                ref_value = cell_value + threshold
+                where_sql = f'{col_name} {op} {threshold}'
+            elif op == SqlOP.between:
+                ref_value_1 = cell_value - threshold
+                ref_value_2 = cell_valeu + threshold
+                where_sql = f'{col_name} between {ref_value_1} and {ref_value_2}'
+            else:
+                where_sql = f'{col_name} {op} {cell_value}'
+        else:
+            where_sql = f"{col_name} = '{cell_text}'"
+        return where_sql
 
     def get_table_prompt(self, prompt, table_data):
         #Add table caption
