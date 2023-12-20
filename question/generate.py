@@ -32,14 +32,17 @@ def main():
                      'where cols', 'where_cols(grid)']
     table_iterator = read_tables(args)
     generator = ChatGptGenerator('./prompt')
+    num_tables = 0
+    num_block = 0
+    out_data = []
+    out_sql_info_file = os.path.join(out_dir, 'sql_info.jsonl')
+    f_o_sql = open(out_sql_info_file, 'w')
     for table_sql_lst in generator.generate_questions(table_iterator):
-        import pdb; pdb.set_trace()
         if len(table_sql_lst) == 0:
             continue
-        out_data = []
         table_id = table_sql_lst[0]['meta']['table_id']
-        out_file = os.path.join(out_dir, f'questions_{table_id}.csv')
         for sql_info in table_sql_lst:
+            f_o_sql.write(json.dumps(sql_info) + '\n')
             meta_info = sql_info['meta']
             out_item = [
                         sql_info['id'],
@@ -54,9 +57,23 @@ def main():
                         [numer_to_letter(a+1) for a in meta_info['where_cols']]
             ] 
             out_data.append(out_item)
-
+        
+        num_tables += 1
+        if num_tables >= 100:
+            num_block += 1
+            out_file = os.path.join(out_dir, f'question_part_{num_block}.csv')
+            df = pd.DataFrame(data=out_data, columns=out_col_names)
+            df.to_csv(out_file)
+            out_data = 0
+            num_tables = 0
+   
+    if len(out_data) > 0:
+        num_block += 1
+        out_file = os.path.join(out_dir, f'question_part_{num_block}.csv')
         df = pd.DataFrame(data=out_data, columns=out_col_names)
         df.to_csv(out_file)
+    
+    f_o_sql.close()
 
 #col_no start from 1
 def numer_to_letter(col_no):

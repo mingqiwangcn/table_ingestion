@@ -1,4 +1,5 @@
 import re
+import numpy as np
 
 Max_Title_Size = 60
 Max_Col_Header_Size = 30
@@ -56,23 +57,23 @@ def preprocess_row(tokenizer, row_item):
         cell_info['text'] = truncate(tokenizer, text, Max_Cell_Size)
 
 def is_float(text):
-    assert text.strip() != ''
-    if '.' not in text:
+    strip_text = text.strip()
+    if '.' not in strip_text:
         return False
-    if re.match(r'^-?\d+(?:\.\d+)$', text) is None:
+    if re.match(r'^-?\d+(?:\.\d+)$', strip_text) is None:
         return False
     return True
 
 def is_int(text):
     strip_text = text.strip()
-    assert strip_text != ''
+    if strip_text == '':
+        return False
     if strip_text[0] in ['-', '+']:
         return strip_text[1].isdigit()
     else:
         return strip_text.isdigit()
 
 def is_bool(text):
-    assert text.strip() != ''
     if text.strip().lower() in ['true', 'false']:
         return True
     else:
@@ -102,9 +103,10 @@ def infer_col_type(table_data):
                     type_lst.append(infer_type)
 
         if len(type_lst) > 0:
-            if all(type_lst == CellDataType.BOOL):
+            type_arr = np.array(type_lst)
+            if all(type_arr == CellDataType.BOOL):
                 col_info['infer_type'] = CellDataType.BOOL
-            elif all(type_lst == CellDataType.INT):
+            elif all(type_arr == CellDataType.INT):
                 col_info['infer_type'] = CellDataType.INT
             elif all([a in (CellDataType.FLOAT, CellDataType.INT) for a in type_lst]):
                 col_info['infer_type'] = CellDataType.FLOAT

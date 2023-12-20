@@ -2,4 +2,4 @@ You are given 1) a table with table caption and table data 2) some sql staements
 Instructions:
 1) Translate sqls into natural language questions.
 2) Each output line is jSON object in the format
-{no.} {natual language question}
+question number | natual language question

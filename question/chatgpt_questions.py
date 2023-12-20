@@ -185,10 +185,10 @@ class ChatGptGenerator:
         return sql_info_lst
 
     def get_where_sql(self, col_name, col_type, cell_text):
-        if col_type in [util.CellDataType.INT, util.CellDataType.FLOAT]:
+        if util.is_float(cell_text) and (col_type in [util.CellDataType.INT, util.CellDataType.FLOAT]):
             op = random.sample(self.sql_op_lst, 1)[0] 
             cell_value = float(cell_text)
-            threshold_int = ramdom.sample(list(range(10)), 1)[0]
+            threshold_int = random.sample(list(range(10)), 1)[0]
             threshold_float = threshold_int / 10
             if col_type == util.CellDataType.INT:
                 threshold = threshold_int
@@ -202,7 +202,7 @@ class ChatGptGenerator:
                 where_sql = f'{col_name} {op} {threshold}'
             elif op == SqlOP.between:
                 ref_value_1 = cell_value - threshold
-                ref_value_2 = cell_valeu + threshold
+                ref_value_2 = cell_value + threshold
                 where_sql = f'{col_name} between {ref_value_1} and {ref_value_2}'
             else:
                 where_sql = f'{col_name} {op} {cell_value}'
@@ -250,8 +250,8 @@ class ChatGptGenerator:
                 sql_info['prompt'] = sql_prompt
                 prompt_sql_info_lst.append(sql_info)
             else:
-                raise ValueError('too many tokens') 
-        
+                break
+
         prompt += self.prompt_sql_tag
         for prompt_sql_info in prompt_sql_info_lst:
             prompt += prompt_sql_info['prompt']
@@ -268,14 +268,16 @@ class ChatGptGenerator:
             table_sql_lst = []
             out_text_lst = response.split('\n')
             for line in out_text_lst:
-                offset = line.find('.')
+                offset = line.find(' | ')
                 if offset < 0:
                     continue
-                q_no = int(line[:offset])
+                
+                q_no_str = (line[:offset].strip())
+                if not util.is_int(q_no_str):
+                    continue
+                q_no = int(q_no_str)
                 sql_info = sql_info_lst[q_no - 1]
                 question = line[offset:].strip()
-                if (question[0] == '"') and (question[-1] == '"'):
-                    question = question[1:-1]
                 sql_info['question'] = question
                 table_sql_lst.append(sql_info)
             
