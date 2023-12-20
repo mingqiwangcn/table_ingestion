@@ -4,6 +4,11 @@ Max_Cell_Size = 100
 Max_Header_Meta_Ratio = 0.2 # {sum of header meta tokens} / {window size}
 MAX_WND_COLS = 20
 
+class CellDataType:
+    INT = 1
+    BOOL = 2
+    FLOAT = 3
+
 # window size is determined by the encoder
 def get_context_window_size(tokenizer):
     prefix = "title: context: " # the prefix is used by the encoder. There are 4 tokens 'title', ':', 'context', ':'
@@ -71,4 +76,34 @@ def is_bool(text):
     else:
         return False
 
+def infer_col_type(table_data):
+    col_data = table_data['columns']
+    row_data = table_data['rows']
+    for col, col_info in enumerate(col_data):
+        type_lst = []
+        for row_item in row_data:
+            cell_info = row_item['cells'][col]
+            cell_text = cell_info['text']
+            infer_type = None
+            if (cell_text != ''):
+                if is_bool(cell_text):
+                    infer_type = CellDataType.BOOL
+                elif is_float(cell_text):
+                    if is_int(cell_text):
+                        infer_type = CellDataType.INT
+                    else:
+                        infer_type = CellDataType.FLOAT
+                else:
+                    infer_type = None
+                if infer_type is not None:
+                    cell_info['infer_type'] = infer_type
+                    type_lst.append(infer_type)
+
+        if len(type_lst) > 0:
+            if all(type_lst == CellDataType.BOOL):
+                col_info['infer_type'] = CellDataType.BOOL
+            elif all(type_lst == CellDataType.INT):
+                col_info['infer_type'] = CellDataType.INT
+            elif all([a in (CellDataType.FLOAT, CellDataType.INT) for a in type_lst])
+                col_info['infer_type'] = CellDataType.FLOAT
 

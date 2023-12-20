@@ -17,7 +17,7 @@ def write_log(log_msg, commit=False):
     if commit:
         f_log.flush()
 
-def chat_complete(messages, temperature=0):
+def chat_complete(client, messages, temperature=0):
     global prompt_no
     prompt_no += 1
     write_log(f'prompt {prompt_no}')
@@ -31,10 +31,10 @@ def chat_complete(messages, temperature=0):
         try:
             print(prompt)
             print('-'*100)
-            response = call_gpt(messages, temperature)
+            response = call_gpt(client, messages, temperature)
             print(response)
             input('\nNext\n')
-        except openai.error.RateLimitError as err:
+        except openai.RateLimitError as err:
             response = None
             retry_cnt += 1
             print('Error from GPT')
@@ -49,11 +49,11 @@ def chat_complete(messages, temperature=0):
     write_log('-'*100, commit=True)
     return response
 
-def call_gpt(messages, temperature):
-    response = openai.ChatCompletion.create(
+def call_gpt(client, messages, temperature):
+    response = client.chat.completions.create(
         model=MODEL_NAME,
         messages=messages,
         temperature=temperature,
     )
-    out_msg = response['choices'][0]['message']['content']
+    out_msg = response.choices[0].message.content 
     return out_msg

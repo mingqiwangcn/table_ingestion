@@ -2,12 +2,6 @@ import util
 from context_window import ContextWindow
 from serial import TableSerializer
 
-
-class CellDataType:
-    INT = 1
-    BOOL = 2
-    FLOAT = 3
-
 class NumOptSerializer(TableSerializer):
     def __init__(self):
         super().__init__()
@@ -23,39 +17,6 @@ class NumOptSerializer(TableSerializer):
     def get_col_idx_token(self, col):
         token = '[COL_%d]' % col
         return token
-
-    def infer_col_type(self, table_data):
-        col_data = table_data['columns']
-        row_data = table_data['rows']
-        for col, col_info in enumerate(col_data):
-            type_lst = []
-            for row_item in row_data:
-                util.preprocess_row(self.tokenizer, row_data[row])
-                cell_info = row_item['cells'][col]
-                cell_text = cell_info['text']
-                infer_type = None
-                if (cell_text != ''):
-                    if util.is_bool(cell_text):
-                        infer_type = CellDataType.BOOL
-                    elif util.is_float(cell_text):
-                        if util.is_int(cell_text):
-                            infer_type = CellDataType.INT
-                        else:
-                            infer_type = CellDataType.FLOAT
-                    else:
-                        infer_type = None
-                    if infer_type is not None:
-                        cell_info['infer_type'] = infer_type
-                        type_lst.append(infer_type)
-            
-            if len(type_lst) > 0:
-                if all(type_lst == CellDataType.BOOL):
-                    col_info['infer_type'] = CellDataType.BOOL
-                elif all(type_lst == CellDataType.INT):
-                    col_info['infer_type'] = CellDataType.INT
-                elif all([a in (CellDataType.FLOAT, CellDataType.INT) for a in type_lst])
-                    col_info['infer_type'] = CellDataType.FLOAT
-        
 
     def get_serial_text(self, table_data, row, col):
         cell_info = table_data['rows'][row_idx]['cells'][col_idx]

@@ -3,17 +3,19 @@ import json
 import random
 import tiktoken
 import numpy as np
-from table2question.chatgpt import gpt
 import glob
+from table_ingestion import util
+import gpt
+from openai import OpenAI
 
 class ChatGptGenerator:
     def __init__(self, prompt_file):
         self.buffer = []
-        self.q_size_per_table = 3
+        #self.q_size_per_table = 10
         self.token_encoding = tiktoken.encoding_for_model(gpt.MODEL_NAME)
-        self.max_caption_size = 100
-        self.max_col_size = 20
-        self.max_cell_size = 50
+        self.max_caption_size = util.Max_Title_Size 
+        self.max_col_size = util.Max_Col_Header_Size
+        self.max_cell_size = util.Max_Cell_Size
         output_size = 1000
         self.ctx_size = 4097 - output_size 
         self.init_prompt(prompt_file)
@@ -22,7 +24,7 @@ class ChatGptGenerator:
         api_key = os.getenv('OPENAI_API_KEY', None)
         if api_key is None:
             raise ValueError('Need to set environment variable OPENAI_API_KEY')
-        gpt.set_key(api_key)
+        self.client = OpenAI(api_key=api_key)
         log_file = os.path.join(os.path.dirname(prompt_file), 'log.txt')
         f_log = open(log_file, 'a')
         gpt.set_logger(f_log)
@@ -37,7 +39,7 @@ class ChatGptGenerator:
                 self.start_prompt_lst.append(prompt_text)
          
         self.prompt_caption_tag = 'Table Caption:'
-        self.prompt_cell_tag = 'Cell Data:'
+        self.prompt_cell_tag = 'Table Data:'
 
     def init_messages(self):
         self.messages = [
@@ -91,10 +93,21 @@ class ChatGptGenerator:
         gpt_text_lst = [a['gpt_text'] for a in col_data] 
         header_prompt = '\t'.join(gpt_text_lst)
         return header_prompt, table_data['gpt_total_col_size'] 
+   
     
-    def get_table_prompt(self, table_data):
-        #Sample a start prompt
-        prompt = random.sample(self.start_prompt_lst, 1)[0]
+    def process_row_cells(self, table_data):
+        row_data = table_data['rows']
+        for row_item in row_data:
+            cell_lst = row_item['cells']
+            for cell_info in cell_lst:
+                item_text = cell_info['text']
+                if '\t' in item_text:
+                    item_text = item_text.replace('\t', ' ')
+                gpt_text, gpt_size = self.truncate_text(item_text, self.max_cell_size)
+                cell_info['gpt_text'] = gpt_text
+         
+
+    def get_table_prompt(self, prompt, table_data):
         #Add table caption
         self.process_caption(table_data)
         prompt += '\n' + self.prompt_caption_tag + '\n' + table_data['gpt_title']
@@ -107,6 +120,9 @@ class ChatGptGenerator:
         num_tokens = self.num_meta_tokens + len(self.token_encoding.encode(prompt))
         assert num_tokens < self.ctx_size
         #Add row data
+        self.process_row_cells(table_data)
+        util.infer_col_type(table_data)
+
         row_data = table_data['rows']
         row_idx_arr = np.arange(len(row_data)).tolist()
         used_row_dict = {}
@@ -118,15 +134,6 @@ class ChatGptGenerator:
                 continue
             #row_total_size = 0
             sample_row_item = row_data[sample_row_idx]
-            cell_lst = sample_row_item['cells']
-            for cell_info in cell_lst:
-                item_text = cell_info['text']
-                if '\t' in item_text:
-                    item_text = item_text.replace('\t', ' ')
-                gpt_text, gpt_size = self.truncate_text(item_text, self.max_cell_size)
-                cell_info['gpt_text'] = gpt_text
-                #cell_info['gpt_size'] = gpt_size
-                #row_total_size += gpt_size
             
             row_prompt = '\t'.join([a['gpt_text'] for a in cell_lst])
             row_prompt = '\n' + row_prompt
@@ -139,14 +146,13 @@ class ChatGptGenerator:
                 break
         return prompt
 
-    def generate_questions(self, table_lst, batch_question_size):
-        q_cnt = 0
-        while q_cnt < batch_question_size:
-            table_data = table_lst[1]  #random.sample(table_lst, 1)[0]
-            prompt = self.get_table_prompt(table_data)
-            self.messages[-1]['content'] = prompt
-            response = gpt.chat_complete(self.messages) 
-            q_cnt += 4
-             
+    def generate_questions(self, table_iterator):
+        for table_data in table_iterator: 
+            for prompt_name in self.start_prompt_lst:
+                table_prompt = self.get_table_prompt(prompt_name, table_data)
+                self.messages[-1]['content'] = table_prompt
+                response = gpt.chat_complete(self.client, self.messages) 
+                print(response)
+                input('\n next ?')
 
 
