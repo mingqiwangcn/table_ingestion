@@ -47,7 +47,7 @@ def main():
 
     start_seq_no = 1
     if state['seq_no'] is not None:
-        start_seq_no = state['seq_no']
+        start_seq_no = state['seq_no'] + 1
         print(f'start from No.{start_seq_no}')
 
     for table_data in read_tables(args):

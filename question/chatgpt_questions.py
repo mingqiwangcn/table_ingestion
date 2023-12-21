@@ -23,6 +23,7 @@ class ChatGptGenerator:
         self.max_caption_size = util.Max_Title_Size 
         self.max_col_size = util.Max_Col_Header_Size
         self.max_cell_size = util.Max_Cell_Size
+        self.max_cols = 50
         output_size = 1000
         self.ctx_size = 4097 - output_size 
         self.init_prompt(prompt_file)
@@ -35,7 +36,6 @@ class ChatGptGenerator:
         log_file = os.path.join(os.path.dirname(prompt_file), 'log.txt')
         f_log = open(log_file, 'a')
         gpt.set_logger(f_log)
-
         self.sql_op_lst = [SqlOP.eq, SqlOP.greater, SqlOP.less, SqlOP.between]
         
     def init_prompt(self, prompt_dir):
@@ -46,7 +46,6 @@ class ChatGptGenerator:
             with open(prompt_file) as f:
                 prompt_text = f.read()
                 self.start_prompt_lst.append(prompt_text)
-         
         self.prompt_caption_tag = 'Table Caption:'
         self.prompt_cell_tag = 'Table Data:'
         self.prompt_sql_tag = '\nSQLs:'
@@ -84,6 +83,16 @@ class ChatGptGenerator:
         table_data['gpt_title'] = caption
         table_data['gpt_title_size'] = caption_size
 
+    def truncate_columns(self, table_data):
+        col_data = table_data['columns']
+        if len(col_data) <= self.max_cols:
+            return
+        table_data['columns'] = col_data[:self.max_cols]
+        row_data = table_data['rows']
+        for row_item in row_data:
+            cell_data = row_item['cells']
+            row_item['cells'] = cell_data[:self.max_cols]
+
     def process_col_header(self, table_data):
         if table_data.get('gpt_total_col_size') is not None:
             return
@@ -116,7 +125,6 @@ class ChatGptGenerator:
                 gpt_text, gpt_size = self.truncate_text(item_text, self.max_cell_size)
                 cell_info['gpt_text'] = gpt_text
          
-
     def col_data_complete(self, row_item, col_lst):
         for col in col_lst:
             cell_text = row_item['cells'][col]['gpt_text'] 
@@ -211,6 +219,7 @@ class ChatGptGenerator:
         return where_sql
 
     def get_table_prompt(self, prompt, table_data):
+        self.truncate_columns(table_data)
         #Add table caption
         self.process_caption(table_data)
         prompt += '\n' + self.prompt_caption_tag + '\n' + table_data['gpt_title']
