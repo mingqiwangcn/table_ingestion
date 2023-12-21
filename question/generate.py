@@ -54,6 +54,8 @@ def main():
         table_seq_no += 1
         if table_seq_no < start_seq_no:
             continue
+        if len(table_data['columns']) < 2:
+            continue
         table_sql_lst = generator.generate_questions(table_data)
         if len(table_sql_lst) == 0:
             continue
