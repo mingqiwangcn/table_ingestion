@@ -284,6 +284,8 @@ class ChatGptGenerator:
             q_no = int(q_no_str)
             sql_info = sql_info_lst[q_no - 1]
             question = line[offset:].strip()
+            assert question[0] == '|'
+            question = question[1:].strip()
             sql_info['question'] = question
             table_sql_lst.append(sql_info)
         return table_sql_lst
