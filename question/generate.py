@@ -15,7 +15,7 @@ def read_tables(args):
     data_file = '../../data/%s/tables/tables.jsonl' % args.dataset
     table_lst = []
     with open(data_file) as f:
-        for line in tqdm(f):
+        for line in f:
             table_data = json.loads(line)
             if len(table_data['rows']) == 0:
                 continue
@@ -32,15 +32,16 @@ def main():
                      'where cols', 'where_cols(grid)']
     table_iterator = read_tables(args)
     generator = ChatGptGenerator('./prompt')
-    num_tables = 0
-    num_block = 0
-    out_data = []
-    out_sql_info_file = os.path.join(out_dir, 'sql_info.jsonl')
-    f_o_sql = open(out_sql_info_file, 'w')
+    table_seq_no = 0
     for table_sql_lst in generator.generate_questions(table_iterator):
+        table_seq_no += 1
         if len(table_sql_lst) == 0:
             continue
+        out_data = []
         table_id = table_sql_lst[0]['meta']['table_id']
+        print(f'No.{table_seq_no} id={table_id}')
+        out_sql_info_file = os.path.join(out_dir, f'sql_info_{table_seq_no}_{table_id}.jsonl')
+        f_o_sql = open(out_sql_info_file, 'w')
         for sql_info in table_sql_lst:
             f_o_sql.write(json.dumps(sql_info) + '\n')
             meta_info = sql_info['meta']
@@ -58,22 +59,11 @@ def main():
             ] 
             out_data.append(out_item)
         
-        num_tables += 1
-        if num_tables >= 100:
-            num_block += 1
-            out_file = os.path.join(out_dir, f'question_part_{num_block}.csv')
-            df = pd.DataFrame(data=out_data, columns=out_col_names)
-            df.to_csv(out_file)
-            out_data = 0
-            num_tables = 0
-   
-    if len(out_data) > 0:
-        num_block += 1
-        out_file = os.path.join(out_dir, f'question_part_{num_block}.csv')
+        f_o_sql.close()
+        out_file = os.path.join(out_dir, f'question_{table_seq_no}_{table_id}.csv')
         df = pd.DataFrame(data=out_data, columns=out_col_names)
         df.to_csv(out_file)
-    
-    f_o_sql.close()
+   
 
 #col_no start from 1
 def numer_to_letter(col_no):
