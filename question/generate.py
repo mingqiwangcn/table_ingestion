@@ -37,7 +37,6 @@ def main():
     out_dir = f'./output/{args.dataset}'
     if not os.path.isdir(out_dir):
         os.makedirs(out_dir)
-    table_iterator = read_tables(args)
     generator = ChatGptGenerator('./prompt')
     table_seq_no = 0
    
@@ -49,12 +48,14 @@ def main():
     start_seq_no = 1
     if state['seq_no'] is not None:
         start_seq_no = state['seq_no']
-    
-    for table_sql_lst in generator.generate_questions(table_iterator):
+        print(f'start from No.{start_seq_no}')
+
+    for table_data in read_tables(args):
         table_seq_no += 1
-        if len(table_sql_lst) == 0:
-            continue
         if table_seq_no < start_seq_no:
+            continue
+        table_sql_lst = generator.generate_questions(table_data)
+        if len(table_sql_lst) == 0:
             continue
         table_id = table_sql_lst[0]['meta']['table_id']
         print(f'No.{table_seq_no} id={table_id}')

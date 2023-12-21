@@ -132,7 +132,7 @@ class ChatGptGenerator:
         aggr_op_lst_general = [None, 'count']
         aggr_op_lst_numeric = [None, 'count', 'max', 'min', 'avg', 'sum']
         num_sql_col_lst = [2, 3]
-        if max(num_sql_col_lst) < 3:
+        if max(num_sql_col_lst) > len(col_lst):
             num_sql_col_lst = [2]
         sql_info_lst = []
         max_try = sample_size * 100
@@ -258,28 +258,24 @@ class ChatGptGenerator:
 
         return prompt, prompt_sql_info_lst
 
-    def generate_questions(self, table_iterator):
-        for table_data in table_iterator: 
-            prompt_name = self.start_prompt_lst[0]
-            table_prompt, sql_info_lst = self.get_table_prompt(prompt_name, table_data)
-            self.messages[-1]['content'] = table_prompt
-            response = gpt.chat_complete(self.client, self.messages) 
-           
-            table_sql_lst = []
-            out_text_lst = response.split('\n')
-            for line in out_text_lst:
-                offset = line.find(' | ')
-                if offset < 0:
-                    continue
-                
-                q_no_str = (line[:offset].strip())
-                if not util.is_int(q_no_str):
-                    continue
-                q_no = int(q_no_str)
-                sql_info = sql_info_lst[q_no - 1]
-                question = line[offset:].strip()
-                sql_info['question'] = question
-                table_sql_lst.append(sql_info)
-            
-            yield table_sql_lst
+    def generate_questions(self, table_data):
+        prompt_name = self.start_prompt_lst[0]
+        table_prompt, sql_info_lst = self.get_table_prompt(prompt_name, table_data)
+        self.messages[-1]['content'] = table_prompt
+        response = gpt.chat_complete(self.client, self.messages) 
+        table_sql_lst = []
+        out_text_lst = response.split('\n')
+        for line in out_text_lst:
+            offset = line.find(' | ')
+            if offset < 0:
+                continue
+            q_no_str = (line[:offset].strip())
+            if not util.is_int(q_no_str):
+                continue
+            q_no = int(q_no_str)
+            sql_info = sql_info_lst[q_no - 1]
+            question = line[offset:].strip()
+            sql_info['question'] = question
+            table_sql_lst.append(sql_info)
+        return table_sql_lst
 
