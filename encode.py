@@ -37,12 +37,14 @@ def encode_blocks(work_dir, block_file, config):
 def main():
     args = get_args()
     config = read_config()
-    block_file = './data/chicago_open/passages.jsonl'
+    block_file = f'./output/{args.dataset}/{args.strategy}/passages.jsonl'
     encode_blocks(args.work_dir, block_file, config)
 
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--work_dir', type=str, required=True)
+    parser.add_argument('--dataset', type=str, required=True)
+    parser.add_argument('--strategy', type=str, required=True)
     args = parser.parse_args()
     return args
 
