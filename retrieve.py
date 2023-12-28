@@ -8,6 +8,7 @@ def get_args():
     parser.add_argument('--work_dir', type=str, required=True)
     parser.add_argument('--dataset', type=str, required=True)
     parser.add_argument('--strategy', type=str, required=True)
+    parser.add_argument('--n_probe', type=int, required=True)
     args = parser.parse_args()
     return args
 
@@ -18,7 +19,8 @@ def main():
     table_dict = read_tables(args.work_dir, args.dataset)
     retr_triples('test', args.work_dir, args.dataset, 
                  test_query_dir, table_dict, False, 
-                 config, strategy=args.strategy, use_tag=False)
+                 config, strategy=args.strategy, use_tag=False, 
+                 n_probe=args.n_probe)
 
 if __name__ == '__main__':
     main()
