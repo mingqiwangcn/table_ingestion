@@ -57,7 +57,17 @@ class SchemaSerializer(TableSerializer):
         }
         return block_info
 
+    def preprocess_row_data(self, table_data):
+        row_data = table_data['rows']
+        for row_item in row_data:
+            util.preprocess_row(self.tokenizer, row_item)
+
+    def preprocess_other(self, table_data):
+        return
+
     def do_serialize(self, table_data):
+        self.preprocess_row_data(table_data)
+        self.preprocess_other()
         schema_block_lst = self.split_columns(table_data)
         for schema_block in schema_block_lst:
             yield from self.serialize_schema_block(table_data, schema_block) 
@@ -74,7 +84,6 @@ class SchemaSerializer(TableSerializer):
         row_cnt = len(row_data)
         block_cols = schema_block['cols']
         for row in range(row_cnt):
-            util.preprocess_row(self.tokenizer, row_data[row])
             for col in block_cols:
                 serial_text = self.get_serial_text(table_data, row, col, block_cols)
                 if self.serial_window.can_add(table_data, row, col, serial_text):
