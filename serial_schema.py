@@ -101,7 +101,6 @@ class SchemaSerializer(TableSerializer):
         self.serial_window.set_schema_text(schema_text)
 
         block_cols = schema_block['cols']
-        import pdb; pdb.set_trace()
         for row in self.get_serial_rows(table_data, schema_block): 
             for col in block_cols:
                 serial_text = self.get_serial_text(table_data, row, col, block_cols)

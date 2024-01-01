@@ -28,8 +28,10 @@ class CompressSerializer(SchemaSerializer):
             yield row
 
     def get_cell_text(self, cell_info):
-        if cell_info['text'] == '':
-            return ''
+        text = cell_info['text']
+        if cell_info['size'] < 2:
+            return text
+
         code = self.serial_window.cell_code_book.get_code(cell_info)
         return code
 

@@ -14,6 +14,8 @@ class CodeBook:
         text_info['count'] += 1
         if text_info['count'] == 2:
             code = '[E' + str(len(self.code_dict)+1) + ']'
+            if code not in self.special_token_dict:
+                self.special_token_dict[code] = True
             self.tokenizer.add_tokens([code], special_tokens=True)
             self.code_dict[key] = {'code':code}
             compress_code = code + ' is ' + text + ' ' + self.tokenizer.sep_token + ' ' 
@@ -28,6 +30,7 @@ class CodeBook:
     
     def reset(self):
         self.text_dict = {}
+        self.special_token_dict = {}
         self.code_dict = {}
         self.code_text = ''
         self.code_size = 0

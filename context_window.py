@@ -72,8 +72,16 @@ class ContextWindow:
     def pop(self, table_data):
         assert(len(self.text_buffer) > 0)
         text_lst = [a['serial_text'] for a in self.text_buffer]
-        out_text = self.schema_text + ''.join(text_lst)
-        out_size = self.schema_size + self.buffer_size
+        code_text = ''
+        code_size = 0
+        special_token_lst = None
+        if self.cell_code_book is not None:
+            code_text = self.cell_code_book.code_text
+            code_size = self.cell_code_book.code_size
+            special_token_lst = list(self.cell_code_book.special_token_dict.keys())
+
+        out_text = self.schema_text + code_text + ''.join(text_lst)
+        out_size = self.schema_size + code_size + self.buffer_size
         out_data = {
             'passage':out_text,
             'tag':{
@@ -81,6 +89,7 @@ class ContextWindow:
                 'table_id':table_data['tableId'],
                 'row':[a['row'] for a in self.text_buffer],
                 'col':[a['col'] for a in self.text_buffer],
+                'special_tokens':special_token_lst,
             }
         }
         #comment out later
