@@ -22,9 +22,9 @@ class SchemaSerializer(TableSerializer):
         if compress_code is not None:
             first_cell = cell_info['first_cell']
             first_cell['updated_serial_text'] = serial_text
-            first_cell['updated_serial_size'] = util.get_token_size(serial_text)
+            first_cell['updated_serial_size'] = util.get_token_size(self.tokenizer, first_cell['updated_serial_text'])
 
-       return serial_text
+        return serial_text
  
     def get_schema_column_text(self, col_name):
         serial_text = col_name + ' ;'  
@@ -89,16 +89,20 @@ class SchemaSerializer(TableSerializer):
     def preprocess_schema_block(self, table_data, schema_block):
         return
 
+    def get_serial_rows(self, table_data, schema_block):
+        row_data = table_data['rows']
+        for row, _ in enumerate(row_data):
+            yield row
+
     def serialize_schema_block(self, table_data, schema_block):
         self.preprocess_schema_block(table_data, schema_block)
 
         schema_text = self.get_window_schema_text(table_data, schema_block)
         self.serial_window.set_schema_text(schema_text)
 
-        row_data = table_data['rows']
-        row_cnt = len(row_data)
         block_cols = schema_block['cols']
-        for row in range(row_cnt):
+        import pdb; pdb.set_trace()
+        for row in self.get_serial_rows(table_data, schema_block): 
             for col in block_cols:
                 serial_text = self.get_serial_text(table_data, row, col, block_cols)
                 if self.serial_window.can_add(table_data, row, col, serial_text):

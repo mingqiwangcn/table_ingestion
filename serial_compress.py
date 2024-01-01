@@ -7,24 +7,47 @@ from code_book import CodeBook
 class CompressSerializer(SchemaSerializer):
     def __init__(self):
         super().__init__()
-        self.serial_window.set_cell_code_book(CodeBook())
+        self.serial_window.set_cell_code_book(CodeBook(self.tokenizer))
 
-    def get_cell_text(cell_info):
-        text = cell_info['text']
-        code = this.serial_window.cell_code_book.get_code(text)
+    def get_serial_rows(self, table_data, schema_block):
+        sorted_bin_lst = schema_block['sorted_bins']
+        bin_row_set = set()
+        for bin_info in sorted_bin_lst:
+            bin_entry = bin_info['bin']
+            for row in bin_entry.item_lst:
+                if row not in bin_row_set:
+                    yield row
+                    bin_row_set.add(row)
+        
+        row_data = table_data['rows']
+        row_lst = [a for a, _ in enumerate(row_data)]
+        table_row_set = set(row_lst) 
+        other_row_set = table_row_set - bin_row_set
+        other_row_lst = list(other_row_set)
+        for row in other_row_lst:
+            yield row
+
+    def get_cell_text(self, cell_info):
+        if cell_info['text'] == '':
+            return ''
+        code = self.serial_window.cell_code_book.get_code(cell_info)
         return code
 
     def preprocess_schema_block(self, table_data, schema_block):
         col_data = table_data['columns']
-        bin_info_lst = []
+        bin_entry_lst = []
         for col in schema_block['cols']:
             bin_table = col_data[col]['bin_table'] 
             for bin_entry in bin_table.bin_array:
                 if bin_entry is None:
                     continue
-                cpr_size = self.compute_bin_cpr_size(table_data, col, bin_entry)
-                bin_info = {'cpr_size':cpr_size, 'bin':bin_entry}
-                bin_info_lst.append(bin_info)
+                bin_entry_lst.append(bin_entry)
+        
+        bin_info_lst = []
+        for bin_entry in bin_entry_lst: 
+            cpr_size = self.compute_bin_cpr_size(table_data, schema_block['cols'], bin_entry)
+            bin_info = {'cpr_size':cpr_size, 'bin':bin_entry}
+            bin_info_lst.append(bin_info)
         sorted_bin_lst = sorted(bin_info_lst, key=lambda x: x['cpr_size'], reverse=True)
         schema_block['sorted_bins'] = sorted_bin_lst
 
@@ -48,7 +71,7 @@ class CompressSerializer(SchemaSerializer):
             cpr_size += (stat_info['count'] - 1) * stat_info['size'] 
         return cpr_size
 
-    def hash_row_to_bins(self, table_data)
+    def hash_row_to_bins(self, table_data):
         col_data = table_data['columns']    
         row_data = table_data['rows']
         num_rows = len(row_data)

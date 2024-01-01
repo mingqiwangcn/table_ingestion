@@ -10,7 +10,7 @@ class ContextWindow:
         self.schema_size = 0
         self.cell_code_book = None
 
-    def set_cell_code_book(cell_code_book):
+    def set_cell_code_book(self, cell_code_book):
         self.cell_code_book = cell_code_book
 
     def set_schema_text(self, text):
@@ -21,11 +21,9 @@ class ContextWindow:
         cell_info = table_data['rows'][row_idx]['cells'][col_idx]
         col_data = table_data['columns']
         col_info = col_data[col_idx]
-        #is_last_cell = (col_idx + 1 == len(col_data))
         token_size = util.get_token_size(self.tokenizer, serial_text)
         cell_info['serial_text'] = serial_text
         cell_info['serial_size'] = token_size
-        #cell_info['is_last_cell'] = int(is_last_cell)
         cell_info['row'] = row_idx
         cell_info['col'] = col_idx
        
@@ -35,7 +33,7 @@ class ContextWindow:
         if self.cell_code_book is not None:
             cpr_code_size = 0
             if compress_code is not None:
-                cpr_code_size = util.get_token_size(compress_code)
+                cpr_code_size = util.get_token_size(self.tokenizer, compress_code)
                 cell_info['cpr_code_size'] = cpr_code_size
                 first_cell = cell_info['first_cell']
                 first_cell_size_chg = first_cell['updated_serial_size'] - first_cell['serial_size']                
@@ -83,7 +81,6 @@ class ContextWindow:
                 'table_id':table_data['tableId'],
                 'row':[a['row'] for a in self.text_buffer],
                 'col':[a['col'] for a in self.text_buffer],
-                'is_last_cell':[a['is_last_cell'] for a in self.text_buffer]
             }
         }
         #comment out later
@@ -95,4 +92,6 @@ class ContextWindow:
     def reset(self):
         self.buffer_size = 0
         self.text_buffer = []
+        self.cell_code_book.reset()
+        
 

@@ -9,16 +9,16 @@ class Bin:
         self.item_lst.append(item)
     
 class BinTable:
-    def __init__(self, tag, size)
+    def __init__(self, tag, size):
         self.tag = tag
         self.size = size
         self.bin_array = [None] * size
 
-    def add(key, item):
+    def add(self, key, item):
         digest = hashlib.sha256(key.encode()).digest()
         slot = int.from_bytes(digest, 'big') % self.size
-        if self.bin_array[slot] is None
-            self.bin_array[slot] = new Bin()
+        if self.bin_array[slot] is None:
+            self.bin_array[slot] = Bin()
         bin_entry = self.bin_array[slot]
         bin_entry.add(item)
 
