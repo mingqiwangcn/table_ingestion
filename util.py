@@ -1,5 +1,6 @@
 import re
 import numpy as np
+import math
 
 Max_Title_Size = 60
 Max_Col_Header_Size = 30
@@ -22,22 +23,33 @@ def get_context_window_size(tokenizer):
     #for the encoder, max_seq_length (incuding prefix, user text, [cls] and [SEP]) = 455 + 4 + 2 = 461 
     return wnd_size 
 
-def wrap_text(text):
+def wrap_text(text, size):
     if len(text.split()) > 1:
         text = '"' + text + '"'
-    return text
+        size += 2
+    return text, size 
+
+def get_hash_key(text):
+    key = text.strip().lower()
+    return key
 
 def get_token_size(tokenizer, text):
     return len(tokenizer.tokenize(text))
 
-def truncate(tokenizer, text, max_size):
+def truncate(tokenizer, text, max_size, out_paras=None):
     tokens = tokenizer.tokenize(text)
-    if len(tokens) > max_size:
+    size = len(tokens)
+    if size > max_size:
         updated_tokens = tokens[:max_size]
+        updated_size = len(updated_tokens)
         updated_text = tokenizer.decode(tokenizer.convert_tokens_to_ids(updated_tokens))
     else:
         updated_text = text
-    return wrap_text(updated_text)
+        updated_size = size
+    ret_text, ret_size = wrap_text(updated_text, updated_size)
+    if out_paras is not None:
+        out_paras['size'] = ret_size
+    return ret_text
 
 def preprocess_schema(tokenizer, table_data):
     title_key = 'documentTitle'
@@ -54,7 +66,9 @@ def preprocess_row(tokenizer, row_item):
     cell_lst = row_item['cells']
     for cell_info in cell_lst:
         text = cell_info['text'].strip()
-        cell_info['text'] = truncate(tokenizer, text, Max_Cell_Size)
+        out_paras = {}
+        cell_info['text'] = truncate(tokenizer, text, Max_Cell_Size, out_paras=out_paras)
+        cell_info['size'] = out_paras['size']
 
 def is_float(text):
     strip_text = text.strip()
@@ -78,6 +92,15 @@ def is_bool(text):
         return True
     else:
         return False
+
+def is_prime(N):
+    if N <= 1:
+        return False
+    sqrt_num = int(math.sqrt(N))
+    for i in range(2, sqrt_num + 1):
+        if N % i == 0:
+            return False
+    return True
 
 def infer_col_type(table_data):
     col_data = table_data['columns']
@@ -110,4 +133,6 @@ def infer_col_type(table_data):
                 col_info['infer_type'] = CellDataType.INT
             elif all([a in (CellDataType.FLOAT, CellDataType.INT) for a in type_lst]):
                 col_info['infer_type'] = CellDataType.FLOAT
+
+        
 

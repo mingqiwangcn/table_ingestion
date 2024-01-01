@@ -3,17 +3,27 @@ from context_window import ContextWindow
 from serial import TableSerializer
 
 class SchemaSerializer(TableSerializer):
-    
     def __init__(self):
         super().__init__()
 
+    def get_cell_text(self, cell_info):
+        return cell_info['text']
+
     def get_serial_text(self, table_data, row, col, block_cols):
-       cell_info = table_data['rows'][row]['cells'][col]
-       col_data = table_data['columns']
-       col_info = col_data[col]
-       is_last_cell = (col == block_cols[-1])
-       sep_token = ';' if not is_last_cell else self.tokenizer.sep_token
-       serial_text = cell_info['text'] + ' ' + sep_token + ' ' 
+        cell_info = table_data['rows'][row]['cells'][col]
+        col_data = table_data['columns']
+        col_info = col_data[col]
+        is_last_cell = (col == block_cols[-1])
+        sep_token = ';' if not is_last_cell else self.tokenizer.sep_token
+       
+        cell_text = self.get_cell_text(cell_info)
+        serial_text = cell_text + ' ' + sep_token + ' '
+        compress_code = cell_info.get('compress_code', None) 
+        if compress_code is not None:
+            first_cell = cell_info['first_cell']
+            first_cell['updated_serial_text'] = serial_text
+            first_cell['updated_serial_size'] = util.get_token_size(serial_text)
+
        return serial_text
  
     def get_schema_column_text(self, col_name):
@@ -67,17 +77,22 @@ class SchemaSerializer(TableSerializer):
 
     def do_serialize(self, table_data):
         self.preprocess_row_data(table_data)
-        self.preprocess_other()
+        self.preprocess_other(table_data)
         schema_block_lst = self.split_columns(table_data)
         for schema_block in schema_block_lst:
             yield from self.serialize_schema_block(table_data, schema_block) 
   
-    def get_schema_text(self, table_data, schema_block):
+    def get_window_schema_text(self, table_data, schema_block):
         schema_text = table_data['documentTitle'] + ' ' + self.tokenizer.sep_token + schema_block['text']
         return schema_text
 
+    def preprocess_schema_block(self, table_data, schema_block):
+        return
+
     def serialize_schema_block(self, table_data, schema_block):
-        schema_text = self.get_schema_text(table_data, schema_block)
+        self.preprocess_schema_block(table_data, schema_block)
+
+        schema_text = self.get_window_schema_text(table_data, schema_block)
         self.serial_window.set_schema_text(schema_text)
 
         row_data = table_data['rows']

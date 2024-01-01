@@ -3,11 +3,23 @@ from tqdm import tqdm
 import os
 from serial_block import BlockSerializer
 from serial_schema import SchemaSerializer 
+from serial_compress import CompressSerializer
 from multiprocessing import Pool as ProcessPool
 import argparse
 
-def read_tables(args):
+def iterate_table(args):
+    data_file = get_table_file(args) 
+    with open(data_file) as f:
+        for line in f:
+            table_data = json.loads(line)
+            yield table_data
+
+def get_table_file(args):
     data_file = '../data/%s/tables/tables.jsonl' % args.dataset
+    return data_file
+
+def read_tables(args):
+    data_file = get_table_file(args) 
     table_lst = []
     with open(data_file) as f:
         for line in tqdm(f):
@@ -21,6 +33,8 @@ def init_worker(args):
         tsl = BlockSerializer()
     elif args.strategy == 'schema':
         tsl = SchemaSerializer()
+    elif args.strategy == 'compress':
+        tsl = CompressSerializer()
     else:
         raise ValueError('Strategy (%s) not supported.' % args.strategy)
 
@@ -43,23 +57,22 @@ def main():
         if answer != 'y':
             return
 
-    print('Loading tables')
-    table_lst = read_tables(args)
-    arg_info_lst = []
-    for table_data in table_lst:
-        if len(table_data['rows']) == 0:
-            continue
-        arg_info = {
-            'table_data':table_data,
-        }
-        arg_info_lst.append(arg_info)
-    
-    if len(arg_info_lst) == 0:
-        print('No table data')
-        return
-
     f_o = open(out_file, 'w')
     if not args.debug:
+        print('Loading tables')
+        table_lst = read_tables(args)
+        arg_info_lst = []
+        for table_data in table_lst:
+            if len(table_data['rows']) == 0:
+                continue
+            arg_info = {
+                'table_data':table_data,
+            }
+            arg_info_lst.append(arg_info)
+        
+        if len(arg_info_lst) == 0:
+            print('No table data')
+            return
         work_pool = ProcessPool(initializer=init_worker, initargs=(args, ))
         for table_block_lst in tqdm(work_pool.imap_unordered(process_table, arg_info_lst), total=len(table_lst)):
             for serial_block in table_block_lst:
@@ -68,7 +81,8 @@ def main():
                 f_o.write(json.dumps(serial_block) + '\n')
     else:
         init_worker(args)
-        for arg_info in tqdm(arg_info_lst):
+        for table_data in tqdm(iterate_table(args)):
+            arg_info = {'table_data':table_data}
             table_block_lst = process_table(arg_info)
             for serial_block in table_block_lst:
                 serial_block['p_id'] = block_id
