@@ -2,6 +2,7 @@ import argparse
 import os
 import generate_passage_embeddings as passage_encoder
 from trainer import read_config
+import util
 
 EmbFileTag = '_embeddings'
 
@@ -13,7 +14,7 @@ def get_encoder_args(model_path, config, show_progress=True):
                                       shard_id=0,
                                       num_shards=1,
                                       per_gpu_batch_size=config['encode_batch_size'],
-                                      passage_maxlength=461,
+                                      passage_maxlength=util.Max_Seq_Length,
                                       model_path=model_path,
                                       no_fp16=False,
                                       show_progress=show_progress

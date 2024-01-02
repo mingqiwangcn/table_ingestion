@@ -2,6 +2,7 @@ import os
 import argparse
 import json
 from trainer import read_config, read_tables, retr_triples
+import util
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -15,6 +16,7 @@ def get_args():
 def main():
     args = get_args()
     config = read_config()
+    config['text_maxlength'] = util.Max_Seq_Length
     test_query_dir = os.path.join(args.work_dir, 'data', args.dataset, 'query', 'test')
     table_dict = read_tables(args.work_dir, args.dataset)
     retr_triples('test', args.work_dir, args.dataset, 

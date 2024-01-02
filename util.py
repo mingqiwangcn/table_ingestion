@@ -7,6 +7,7 @@ Max_Col_Header_Size = 30
 Max_Cell_Size = 100
 Max_Header_Meta_Ratio = 0.2 # {sum of header meta tokens} / {window size}
 MAX_WND_COLS = 20
+Max_Seq_Length = 461
 
 class CellDataType:
     INT = 1
