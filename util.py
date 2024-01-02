@@ -13,6 +13,7 @@ class CellDataType:
     INT = 1
     BOOL = 2
     FLOAT = 3
+    POLYGON = 4
 
 # window size is determined by the encoder
 def get_context_window_size(tokenizer):
@@ -84,15 +85,30 @@ def is_int(text):
     if strip_text == '':
         return False
     if strip_text[0] in ['-', '+']:
-        return strip_text[1].isdigit()
+        if len(strip_text) > 1:
+            return strip_text[1].isdigit()
+        else:
+            return False
     else:
         return strip_text.isdigit()
 
 def is_bool(text):
-    if text.strip().lower() in ['true', 'false']:
+    if text.strip().lower() in ['true', 'false', 't', 'f']:
         return True
     else:
         return False
+
+def is_polygon(text):
+    text = text.strip().lower()
+    if text[0] == '"' and text[-1] == '"':
+        text = text[1:-1]
+    polygon_sub_str = 'multipolygon'
+    if text.startswith(polygon_sub_str):
+        text = text.replace(polygon_sub_str, '')
+        for ch in text:
+            if not (ch in ['(', ')', ',' , ' ', '.'] or ch.isdigit()):
+                return False
+    return True
 
 def is_prime(N):
     if N <= 1:
@@ -108,18 +124,29 @@ def infer_col_type(table_data):
     row_data = table_data['rows']
     for col, col_info in enumerate(col_data):
         type_lst = []
+        bool_count = 0
+        int_count = 0
+        float_count = 0
+        polygon_count = 0
         for row_item in row_data:
+            if (bool_count >= 3) or (int_count >= 3) or (float_count >= 3) or (polygon_count >= 1):
+                break
             cell_info = row_item['cells'][col]
             cell_text = cell_info['text']
             infer_type = None
             if (cell_text != ''):
                 if is_bool(cell_text):
                     infer_type = CellDataType.BOOL
+                    bool_count += 1
+                elif is_int(cell_text):
+                    infer_type = CellDataType.INT
+                    int_count += 1
                 elif is_float(cell_text):
-                    if is_int(cell_text):
-                        infer_type = CellDataType.INT
-                    else:
-                        infer_type = CellDataType.FLOAT
+                    infer_type = CellDataType.FLOAT
+                    float_count += 1
+                elif is_polygon(cell_text):
+                    infer_type = CellDataType.POLYGON
+                    polygon_count += 1
                 else:
                     infer_type = None
                 if infer_type is not None:
@@ -128,12 +155,14 @@ def infer_col_type(table_data):
 
         if len(type_lst) > 0:
             type_arr = np.array(type_lst)
-            if all(type_arr == CellDataType.BOOL):
+            if bool_count >= 3:
                 col_info['infer_type'] = CellDataType.BOOL
-            elif all(type_arr == CellDataType.INT):
+            elif int_count >= 3: 
                 col_info['infer_type'] = CellDataType.INT
-            elif all([a in (CellDataType.FLOAT, CellDataType.INT) for a in type_lst]):
+            elif float_count >= 3: 
                 col_info['infer_type'] = CellDataType.FLOAT
-
+            elif polygon_count >= 1:
+                col_info['infer_type'] = CellDataType.POLYGON
+            
         
 

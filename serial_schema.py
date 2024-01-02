@@ -5,17 +5,23 @@ from serial import TableSerializer
 class SchemaSerializer(TableSerializer):
     def __init__(self):
         super().__init__()
+        self.numeric_serializer = None
+
+    def set_numeric_serializer(self, numeric_serializer):
+        self.numeric_serializer = numeric_serializer
 
     def get_cell_text(self, cell_info):
         return cell_info['text']
 
     def get_serial_text(self, table_data, row, col, block_cols):
-        cell_info = table_data['rows'][row]['cells'][col]
         col_data = table_data['columns']
         col_info = col_data[col]
         is_last_cell = (col == block_cols[-1])
         sep_token = ';' if not is_last_cell else self.tokenizer.sep_token
+        if col_info.get('ignore_row_serial', False):
+            return ''
        
+        cell_info = table_data['rows'][row]['cells'][col]
         cell_text = self.get_cell_text(cell_info)
         serial_text = cell_text + ' ' + sep_token + ' '
         compress_code = cell_info.get('compress_code', None) 
@@ -77,6 +83,10 @@ class SchemaSerializer(TableSerializer):
 
     def do_serialize(self, table_data):
         self.preprocess_row_data(table_data)
+        
+        if self.numeric_serializer is not None:
+            self.numeric_serializer.prepare(table_data)
+        
         self.preprocess_other(table_data)
         schema_block_lst = self.split_columns(table_data)
         for schema_block in schema_block_lst:

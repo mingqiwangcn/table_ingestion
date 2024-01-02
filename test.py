@@ -4,6 +4,7 @@ import os
 from serial_block import BlockSerializer
 from serial_schema import SchemaSerializer 
 from serial_compress import CompressSerializer
+from serial_numeric import NumericSerializer
 from multiprocessing import Pool as ProcessPool
 import argparse
 
@@ -35,6 +36,9 @@ def init_worker(args):
         tsl = SchemaSerializer()
     elif args.strategy == 'compress':
         tsl = CompressSerializer()
+    elif args.strategy == 'compress_numeric':
+        tsl = CompressSerializer()
+        tsl.set_numeric_serializer(NumericSerializer()) 
     else:
         raise ValueError('Strategy (%s) not supported.' % args.strategy)
 

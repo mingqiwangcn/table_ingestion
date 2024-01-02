@@ -39,7 +39,10 @@ class CompressSerializer(SchemaSerializer):
         col_data = table_data['columns']
         bin_entry_lst = []
         for col in schema_block['cols']:
-            bin_table = col_data[col]['bin_table'] 
+            col_info = col_data[col]
+            if col_info.get('ignore_row_serial', False):
+                continue
+            bin_table = col_info['bin_table'] 
             for bin_entry in bin_table.bin_array:
                 if bin_entry is None:
                     continue
@@ -79,8 +82,7 @@ class CompressSerializer(SchemaSerializer):
         num_rows = len(row_data)
         bin_table_lst = []
         for col, col_info in enumerate(col_data):
-            infer_type = col_info.get('infer_type', None) 
-            if infer_type in [util.CellDataType.FLOAT, util.CellDataType.INT, util.CellDataType.BOOL]:
+            if col_info.get('ignore_row_serial', False):
                 continue
             bin_table = BinTable(col, num_rows)
             col_info['bin_table'] = bin_table
