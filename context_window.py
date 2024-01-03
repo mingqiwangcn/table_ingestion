@@ -101,6 +101,7 @@ class ContextWindow:
     def reset(self):
         self.buffer_size = 0
         self.text_buffer = []
-        self.cell_code_book.reset()
+        if self.cell_code_book is not None:
+            self.cell_code_book.reset()
         
 
