@@ -108,7 +108,9 @@ def is_polygon(text):
         for ch in text:
             if not (ch in ['(', ')', ',' , ' ', '.'] or ch.isdigit()):
                 return False
-    return True
+        return True
+    else:
+        return False
 
 def is_prime(N):
     if N <= 1:
