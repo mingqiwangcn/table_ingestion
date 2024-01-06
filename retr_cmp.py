@@ -96,7 +96,10 @@ def main():
             output_retr_data(retr_data, out_file)
     
     out_dir = '/home/cc/code/solo_work/data/nyc_open_1000/query/test/cmp_log'
-    cmp_pairs = [('block', 'schema'), ('schema', 'compress'), ('compress', 'compress_numeric')]
+    cmp_pairs = [('block', 'schema'), 
+                 ('schema', 'compress'), 
+                 ('compress', 'compress_numeric'), 
+                 ('schema', 'compress_numeric')]
     for pair in cmp_pairs:
         retr_data_1 = retr_dict[pair[0]]
         retr_data_2 = retr_dict[pair[1]]

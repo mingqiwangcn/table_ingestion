@@ -13,6 +13,9 @@ class SchemaSerializer(TableSerializer):
     def get_cell_text(self, cell_info):
         return cell_info['text']
 
+    def update_related_cell(self, cell_info, serial_text):
+        return
+
     def get_serial_text(self, table_data, row, col, block_cols):
         col_data = table_data['columns']
         col_info = col_data[col]
@@ -24,11 +27,8 @@ class SchemaSerializer(TableSerializer):
         cell_info = table_data['rows'][row]['cells'][col]
         cell_text = self.get_cell_text(cell_info)
         serial_text = cell_text + ' ' + sep_token + ' '
-        compress_code = cell_info.get('compress_code', None) 
-        if compress_code is not None:
-            first_cell = cell_info['first_cell']
-            first_cell['updated_serial_text'] = serial_text
-            first_cell['updated_serial_size'] = util.get_token_size(self.tokenizer, first_cell['updated_serial_text'])
+        
+        self.update_related_cell(cell_info, serial_text)
 
         return serial_text
  
@@ -106,10 +106,11 @@ class SchemaSerializer(TableSerializer):
 
     def serialize_schema_block(self, table_data, schema_block):
         self.preprocess_schema_block(table_data, schema_block)
-
         schema_text = self.get_window_schema_text(table_data, schema_block)
         self.serial_window.set_schema_text(schema_text)
+        yield from self.get_wnd_block(table_data, schema_block)
 
+    def get_wnd_block(self, table_data, schema_block):
         block_cols = schema_block['cols']
         for row in self.get_serial_rows(table_data, schema_block): 
             for col in block_cols:

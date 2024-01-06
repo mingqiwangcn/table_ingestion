@@ -35,6 +35,13 @@ class CompressSerializer(SchemaSerializer):
         code = self.serial_window.cell_code_book.get_code(cell_info)
         return code
 
+    def update_related_cell(self, cell_info, serial_text):
+        compress_code = cell_info.get('compress_code', None) 
+        if compress_code is not None:
+            first_cell = cell_info['first_cell']
+            first_cell['updated_serial_text'] = serial_text
+            first_cell['updated_serial_size'] = util.get_token_size(self.tokenizer, first_cell['updated_serial_text'])
+
     def preprocess_schema_block(self, table_data, schema_block):
         col_data = table_data['columns']
         bin_entry_lst = []
