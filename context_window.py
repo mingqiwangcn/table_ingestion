@@ -35,19 +35,21 @@ class ContextWindow:
             if compress_code is not None:
                 cpr_code_size = util.get_token_size(self.tokenizer, compress_code)
                 cell_info['cpr_code_size'] = cpr_code_size
-                first_cell = cell_info['first_cell']
-                first_cell_size_chg = first_cell['updated_serial_size'] - first_cell['serial_size']                
-                updated_buffer_size = self.buffer_size + first_cell_size_chg 
+                pre_cell_lst = cell_info['pre_cell_lst']
+                for pre_cell in pre_cell_lst:
+                    pre_cell_size_chg = pre_cell['updated_serial_size'] - pre_cell['serial_size']                
+                    updated_buffer_size = self.buffer_size + pre_cell_size_chg 
 
             code_size = self.cell_code_book.code_size + cpr_code_size 
 
         if self.schema_size + code_size + updated_buffer_size + token_size > self.wnd_size:
             if compress_code is not None:
                 del cell_info['compress_code']
-                first_cell = cell_info['first_cell']
-                del first_cell['updated_serial_text']
-                del first_cell['updated_serial_size']
-                del cell_info['first_cell']
+                pre_cell_lst = cell_info['pre_cells']
+                for pre_cell in pre_cell_lst:
+                    del pre_cell['updated_serial_text']
+                    del pre_cell['updated_serial_size']
+                del cell_info['pre_cells']
             return False
         return True
    
@@ -58,11 +60,13 @@ class ContextWindow:
         self.text_buffer.append(cell_info)
         compress_code = cell_info.get('compress_code', None)
         if compress_code is not None:
-            first_cell = cell_info['first_cell']
-            first_cell_size_chg = first_cell['updated_serial_size'] - first_cell['serial_size']                
-            self.buffer_size += first_cell_size_chg
-            first_cell['serial_text'] = first_cell['updated_serial_text']
-            first_cell['serial_size'] = first_cell['updated_serial_size']
+            pre_cell_lst = cell_info['first_cell']
+            for pre_cell in pre_cell_lst:
+                pre_cell_size_chg = pre_cell['updated_serial_size'] - pre_cell['serial_size']                
+                self.buffer_size += pre_cell_size_chg
+                pre_cell['serial_text'] = pre_cell['updated_serial_text']
+                pre_cell['serial_size'] = pre_cell['updated_serial_size']
+            
             self.cell_code_book.code_text += compress_code
             self.cell_code_book.code_size += cell_info['cpr_code_size']
 

@@ -10,12 +10,6 @@ class SchemaSerializer(TableSerializer):
     def set_numeric_serializer(self, numeric_serializer):
         self.numeric_serializer = numeric_serializer
 
-    def get_cell_text(self, cell_info):
-        return cell_info['text']
-
-    def update_related_cell(self, cell_info, serial_text):
-        return
-
     def get_serial_text(self, table_data, row, col, block_cols):
         col_data = table_data['columns']
         col_info = col_data[col]
@@ -25,11 +19,9 @@ class SchemaSerializer(TableSerializer):
             return ''
        
         cell_info = table_data['rows'][row]['cells'][col]
-        cell_text = self.get_cell_text(cell_info)
+        cell_text = cell_info['text']
         serial_text = cell_text + ' ' + sep_token + ' '
         
-        self.update_related_cell(cell_info, serial_text)
-
         return serial_text
  
     def get_schema_column_text(self, col_name):
