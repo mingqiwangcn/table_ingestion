@@ -38,39 +38,60 @@ def get_hash_key(text):
 def get_token_size(tokenizer, text):
     return len(tokenizer.tokenize(text))
 
-def truncate(tokenizer, text, max_size, out_paras=None):
-    tokens = tokenizer.tokenize(text)
-    size = len(tokens)
-    if size > max_size:
-        updated_tokens = tokens[:max_size]
-        updated_size = len(updated_tokens)
-        updated_text = tokenizer.decode(tokenizer.convert_tokens_to_ids(updated_tokens))
-    else:
-        updated_text = text
-        updated_size = size
-    ret_text, ret_size = wrap_text(updated_text, updated_size)
-    if out_paras is not None:
-        out_paras['size'] = ret_size
-    return ret_text
+def truncate_table(tokenizer, text_lst, max_size):
+    batch_encoding = tokenizer(text_lst,
+                               truncation=True, 
+                               max_length=max_size, 
+                               add_special_tokens=False,
+                               return_token_type_ids=False,
+                               return_attention_mask=False,
+                               return_length=True
+                               )
+   
+    input_id_lst = batch_encoding['input_ids']
+    token_size_lst = batch_encoding['length']
+    
+    out_text_lst = text_lst
+    decode_offset_lst = [offset for offset, size in enumerate(token_size_lst) if size == max_size]
+    if len(decode_offset_lst) > 0: 
+        decode_input_lst =[input_id_lst[offset] for offset in decode_offset_lst] 
+        decode_text_lst = tokenizer.batch_decode(decode_input_lst)
+        out_text_lst = []
+        offset_map = {}
+        for pos, offset in enumerate(decode_offset_lst):
+            offset_map[offset] = pos
+        for offset, _ in enumerate(text_lst):
+            if offset not in offset_map:
+                out_text_lst.append(text_lst[offset])
+            else:
+                decode_pos = offset_map[offset]
+                out_text_lst.append(decode_text_lst[decode_pos])
+
+    import pdb; pdb.set_trace()
+    return out_text_lst, token_size_lst
 
 def preprocess_schema(tokenizer, table_data):
     title_key = 'documentTitle'
     title = table_data[title_key].strip()
-    table_data[title_key] = truncate(tokenizer, title, Max_Title_Size)
-    table_data['title_size'] = len(tokenizer.tokenize(table_data[title_key]))
+    title_info = truncate_table(tokenizer, [title], Max_Title_Size)
+    table_data[title_key] = title_info[0][0]
+    table_data['title_size'] = title_info[1][0]
+    
 
     col_data = table_data['columns']
-    for col_info in col_data:
-        text = col_info['text'].strip()
-        col_info['text'] = truncate(tokenizer, text, Max_Col_Header_Size)
+    text_lst = [col_info['text'].strip() for col_info in col_data]
+    truncate_table(tokenizer, text_lst, Max_Cell_Size)
 
 def preprocess_row(tokenizer, row_item):
     cell_lst = row_item['cells']
+    text_lst = [cell_info['text'].strip() for cell_info in cell_lst]
+    truncate(tokenizer, text_lst, Max_Cell_Size)
+
     for cell_info in cell_lst:
         text = cell_info['text'].strip()
-        out_paras = {}
-        cell_info['text'] = truncate(tokenizer, text, Max_Cell_Size, out_paras=out_paras)
-        cell_info['size'] = out_paras['size']
+        out_para_dict = {}
+        cell_info['text'] = truncate_table(tokenizer, text, Max_Cell_Size, out_paras=out_para_dict)
+        cell_info['size'] = out_para_dict['size']
 
 def is_float(text):
     strip_text = text.strip()
