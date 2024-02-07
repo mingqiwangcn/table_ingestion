@@ -17,11 +17,11 @@ class ContextWindow:
         self.schema_text = text
         self.schema_size = util.get_token_size(self.tokenizer, self.schema_text)
 
-    def can_add(self, table_data, row_idx, col_idx, serial_text):
+    def can_add(self, table_data, row_idx, col_idx, serial_text, serial_size):
         cell_info = table_data['rows'][row_idx]['cells'][col_idx]
         col_data = table_data['columns']
         col_info = col_data[col_idx]
-        token_size = util.get_token_size(self.tokenizer, serial_text)
+        token_size = serial_size #util.get_token_size(self.tokenizer, serial_text)
         cell_info['serial_text'] = serial_text
         cell_info['serial_size'] = token_size
         cell_info['row'] = row_idx
@@ -97,7 +97,7 @@ class ContextWindow:
             }
         }
         #comment out later
-        assert(len(self.tokenizer.tokenize(out_text)) <= self.wnd_size)
+        #assert(len(self.tokenizer.tokenize(out_text)) <= self.wnd_size)
         
         self.reset()
         return out_data

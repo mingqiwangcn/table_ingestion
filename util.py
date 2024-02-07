@@ -67,7 +67,6 @@ def truncate_table(tokenizer, text_lst, max_size):
                 decode_pos = offset_map[offset]
                 out_text_lst.append(decode_text_lst[decode_pos])
 
-    import pdb; pdb.set_trace()
     return out_text_lst, token_size_lst
 
 def preprocess_schema(tokenizer, table_data):
@@ -80,18 +79,19 @@ def preprocess_schema(tokenizer, table_data):
 
     col_data = table_data['columns']
     text_lst = [col_info['text'].strip() for col_info in col_data]
-    truncate_table(tokenizer, text_lst, Max_Cell_Size)
+    out_text_lst, token_size_lst = truncate_table(tokenizer, text_lst, Max_Col_Header_Size)
+    for offset, col_info in enumerate(col_data):
+        col_info['text'] = out_text_lst[offset]
+        col_info['size'] = token_size_lst[offset]
 
-def preprocess_row(tokenizer, row_item):
-    cell_lst = row_item['cells']
+def preprocess_row(tokenizer, row_data, start_row, end_row):
+    cell_lst = [cell_info for row in range(start_row, end_row) for cell_info in row_data[row]['cells']]
     text_lst = [cell_info['text'].strip() for cell_info in cell_lst]
-    truncate(tokenizer, text_lst, Max_Cell_Size)
+    out_text_lst, token_size_lst = truncate_table(tokenizer, text_lst, Max_Cell_Size)
 
-    for cell_info in cell_lst:
-        text = cell_info['text'].strip()
-        out_para_dict = {}
-        cell_info['text'] = truncate_table(tokenizer, text, Max_Cell_Size, out_paras=out_para_dict)
-        cell_info['size'] = out_para_dict['size']
+    for offset, cell_info in enumerate(cell_lst):
+        cell_info['text'] = out_text_lst[offset] 
+        cell_info['size'] = token_size_lst[offset]
 
 def is_float(text):
     strip_text = text.strip()

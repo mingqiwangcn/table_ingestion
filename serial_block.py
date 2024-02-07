@@ -1,3 +1,4 @@
+from tqdm import tqdm
 import util
 from context_window import ContextWindow
 from serial import TableSerializer
@@ -12,8 +13,9 @@ class BlockSerializer(TableSerializer):
        col_info = col_data[col]
        is_last_cell = (col + 1 == len(col_data))
        sep_token = ';' if not is_last_cell else self.tokenizer.sep_token
-       serial_text = col_info['text'] + ' ' + cell_info['text'] + ' ' + sep_token + ' ' 
-       return serial_text
+       serial_text = col_info['text'] + ' : ' + cell_info['text'] + ' ' + sep_token + ' '
+       serial_size = col_info['size'] + 1 + cell_info['size'] + 1
+       return serial_text, serial_size
 
     def get_schema_text(self, table_data):
         title = table_data['documentTitle'] + ' ' + self.tokenizer.sep_token
@@ -26,11 +28,11 @@ class BlockSerializer(TableSerializer):
         row_data = table_data['rows']
         row_cnt = len(row_data)
         col_cnt = len(table_data['columns'])
-        for row in range(row_cnt):
-            util.preprocess_row(self.tokenizer, row_data[row])
+        for row in tqdm(range(row_cnt)):
+            util.preprocess_row(self.tokenizer, row_data, row, row + 1)
             for col in range(col_cnt):
-                serial_text = self.get_serial_text(table_data, row, col)
-                if self.serial_window.can_add(table_data, row, col, serial_text):
+                serial_text, serial_size = self.get_serial_text(table_data, row, col)
+                if self.serial_window.can_add(table_data, row, col, serial_text, serial_size):
                     self.serial_window.add(table_data, row, col)
                 else:
                     serial_block = self.serial_window.pop(table_data)
