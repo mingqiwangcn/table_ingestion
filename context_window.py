@@ -33,8 +33,7 @@ class ContextWindow:
         if self.cell_code_book is not None:
             cpr_code_size = 0
             if compress_code is not None:
-                cpr_code_size = util.get_token_size(self.tokenizer, compress_code)
-                cell_info['cpr_code_size'] = cpr_code_size
+                cpr_code_size = cell_info['cpr_code_size']
                 pre_cell_lst = cell_info['pre_cells']
                 for pre_cell in pre_cell_lst:
                     pre_cell_size_chg = pre_cell['updated_serial_size'] - pre_cell['serial_size']                

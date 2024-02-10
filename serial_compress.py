@@ -33,31 +33,32 @@ class CompressSerializer(SchemaSerializer):
         is_last_cell = (col == block_cols[-1])
         sep_token = ';' if not is_last_cell else self.tokenizer.sep_token
         if col_info.get('ignore_row_serial', False):
-            return ''
+            return '', 0
        
         cell_info = table_data['rows'][row]['cells'][col]
-        cell_text = self.get_cell_text(cell_info)
+        cell_text, cell_size = self.get_cell_text(cell_info)
         serial_text = cell_text + ' ' + sep_token + ' '
-        
-        self.update_related_cell(cell_info, serial_text)
+        serial_size = cell_size + 1 
 
-        return serial_text
+        self.update_related_cell(cell_info, serial_text, serial_size)
+
+        return serial_text, serial_size
 
     def get_cell_text(self, cell_info):
         text = cell_info['text']
         if cell_info['size'] < 2:
-            return text
+            return text, cell_info['size']
 
-        code = self.serial_window.cell_code_book.get_code(cell_info)
-        return code
+        code, code_size = self.serial_window.cell_code_book.get_code(cell_info)
+        return code, code_size
 
-    def update_related_cell(self, cell_info, serial_text):
+    def update_related_cell(self, cell_info, serial_text, serial_size):
         compress_code = cell_info.get('compress_code', None) 
         if compress_code is not None:
             pre_cell_lst = cell_info['pre_cells']
             for pre_cell in pre_cell_lst:
                 pre_cell['updated_serial_text'] = serial_text
-                pre_cell['updated_serial_size'] = util.get_token_size(self.tokenizer, pre_cell['updated_serial_text'])
+                pre_cell['updated_serial_size'] =serial_size
 
     def preprocess_schema_block(self, table_data, schema_block):
         col_data = table_data['columns']
