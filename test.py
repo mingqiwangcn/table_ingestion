@@ -177,7 +177,7 @@ def main():
     if not args.debug:
         num_workers = os.cpu_count()
         work_pool = ProcessPool(num_workers, initializer=init_worker, initargs=(args, ))
-        task_batch_size = 500
+        task_batch_size = 1000
         num_tasks = len(arg_info_lst)
         for start_pos in range(0, num_tasks, task_batch_size):
             end_pos = min(start_pos + task_batch_size, num_tasks)
@@ -190,11 +190,13 @@ def main():
                     do_write(args, f_o, f_o_cpr, f_o_scm, serial_block)
     else:
         init_worker(args)
-        out_part_info_lst = []
-        #import pdb; pdb.set_trace()
         for arg_info in tqdm(arg_info_lst):
-            out_part_info = process_table(arg_info)
-            out_part_info_lst.append(out_part_info)
+            serial_block_lst = process_table(arg_info)
+            for serial_block in serial_block_lst:
+                serial_block['p_id'] = block_id
+                block_id += 1
+                do_write(args, f_o, f_o_cpr, f_o_scm, serial_block)
+            
     
     if f_o is not None: 
         f_o.close()

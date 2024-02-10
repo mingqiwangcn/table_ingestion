@@ -21,11 +21,6 @@ class BlockSerializer(TableSerializer):
         title = table_data['documentTitle'] + ' ' + self.tokenizer.sep_token
         return title 
 
-    def get_batch_rows(self, row_cnt, batch_size):
-        for start_row in range(0, row_cnt, batch_size):
-            end_row = min(start_row + batch_size, row_cnt)
-            yield (start_row, end_row)
-
     def do_serialize(self, table_data):
         schema_text = self.get_schema_text(table_data)
         self.serial_window.set_schema_text(schema_text)
@@ -33,18 +28,15 @@ class BlockSerializer(TableSerializer):
         row_data = table_data['rows']
         row_cnt = len(row_data)
         col_cnt = len(table_data['columns'])
-        batch_size = 100
-        for start_row, end_row in self.get_batch_rows(row_cnt, batch_size):
-            util.preprocess_row(self.tokenizer, row_data, start_row, end_row)
-            for row in range(start_row, end_row):
-                for col in range(col_cnt):
-                    serial_text, serial_size = self.get_serial_text(table_data, row, col)
-                    if self.serial_window.can_add(table_data, row, col, serial_text, serial_size):
-                        self.serial_window.add(table_data, row, col)
-                    else:
-                        serial_block = self.serial_window.pop(table_data)
-                        yield serial_block
-                        self.serial_window.add(table_data, row, col)
+        for row in range(row_cnt):
+            for col in range(col_cnt):
+                serial_text, serial_size = self.get_serial_text(table_data, row, col)
+                if self.serial_window.can_add(table_data, row, col, serial_text, serial_size):
+                    self.serial_window.add(table_data, row, col)
+                else:
+                    serial_block = self.serial_window.pop(table_data)
+                    yield serial_block
+                    self.serial_window.add(table_data, row, col)
         
         if self.serial_window.can_pop():
             serial_block = self.serial_window.pop(table_data)

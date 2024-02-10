@@ -76,7 +76,6 @@ def preprocess_schema(tokenizer, table_data):
     table_data[title_key] = title_info[0][0]
     table_data['title_size'] = title_info[1][0]
     
-
     col_data = table_data['columns']
     text_lst = [col_info['text'].strip() for col_info in col_data]
     out_text_lst, token_size_lst = truncate_table(tokenizer, text_lst, Max_Col_Header_Size)
@@ -84,14 +83,40 @@ def preprocess_schema(tokenizer, table_data):
         col_info['text'] = out_text_lst[offset]
         col_info['size'] = token_size_lst[offset]
 
-def preprocess_row(tokenizer, row_data, start_row, end_row):
-    cell_lst = [cell_info for row in range(start_row, end_row) for cell_info in row_data[row]['cells']]
-    text_lst = [cell_info['text'].strip() for cell_info in cell_lst]
-    out_text_lst, token_size_lst = truncate_table(tokenizer, text_lst, Max_Cell_Size)
+    row_cnt = len(table_data['rows'])
+    preprocess_row(tokenizer, table_data, 0, row_cnt) # may use batch in case of large rows.
 
-    for offset, cell_info in enumerate(cell_lst):
-        cell_info['text'] = out_text_lst[offset] 
-        cell_info['size'] = token_size_lst[offset]
+def preprocess_row(tokenizer, table_data, start_row, end_row):
+    col_num = len(table_data['columns'])
+    row_data = table_data['rows']
+    row_num = len(row_data)
+    for col in range(col_num):
+        text_dict = {}
+        for row in range(start_row, end_row):
+            cell_info = row_data[row]['cells'][col]
+            cell_info['text'] = cell_info['text'].strip()
+            cell_text = cell_info['text']
+            if cell_text != '':
+                key = get_hash_key(cell_text)
+                if key not in text_dict:
+                    text_dict[key] = {'text':cell_text, 'rows':[]}
+                row_lst = text_dict[key]['rows']
+                row_lst.append(row)
+            else:
+                cell_info['size'] = 0
+
+        key_lst = list(text_dict.keys())
+        if len(key_lst) > 0:
+            text_lst = [text_dict[key]['text'] for key in key_lst]
+            out_text_lst, token_size_lst = truncate_table(tokenizer, text_lst, Max_Cell_Size)
+            for offset, key in enumerate(key_lst):
+                out_text = out_text_lst[offset]
+                token_size = token_size_lst[offset]
+                row_lst = text_dict[key]['rows']
+                for row in row_lst:
+                    cell_info = row_data[row]['cells'][col]
+                    cell_info['text'] = out_text
+                    cell_info['size'] = token_size
 
 def is_float(text):
     strip_text = text.strip()
