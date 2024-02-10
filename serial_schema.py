@@ -16,13 +16,13 @@ class SchemaSerializer(TableSerializer):
         is_last_cell = (col == block_cols[-1])
         sep_token = ';' if not is_last_cell else self.tokenizer.sep_token
         if col_info.get('ignore_row_serial', False):
-            return ''
+            return '', 0
        
         cell_info = table_data['rows'][row]['cells'][col]
         cell_text = cell_info['text']
-        serial_text = cell_text + ' ' + sep_token + ' '
-        
-        return serial_text
+        serial_text = cell_text + ' : ' + sep_token + ' '
+        serial_size = cell_info['size'] + 1 + 1
+        return serial_text, serial_size
  
     def get_schema_column_text(self, col_name):
         serial_text = col_name + ' ;'  
@@ -65,17 +65,10 @@ class SchemaSerializer(TableSerializer):
         }
         return block_info
 
-    def preprocess_row_data(self, table_data):
-        row_data = table_data['rows']
-        for row_item in row_data:
-            util.preprocess_row(self.tokenizer, row_item)
-
     def preprocess_other(self, table_data):
         return
 
     def do_serialize(self, table_data):
-        self.preprocess_row_data(table_data)
-        
         if self.numeric_serializer is not None:
             self.numeric_serializer.prepare(table_data)
         
@@ -106,8 +99,8 @@ class SchemaSerializer(TableSerializer):
         block_cols = schema_block['cols']
         for row in self.get_serial_rows(table_data, schema_block): 
             for col in block_cols:
-                serial_text = self.get_serial_text(table_data, row, col, block_cols)
-                if self.serial_window.can_add(table_data, row, col, serial_text):
+                serial_text, serial_size = self.get_serial_text(table_data, row, col, block_cols)
+                if self.serial_window.can_add(table_data, row, col, serial_text, serial_size):
                     self.serial_window.add(table_data, row, col)
                 else:
                     serial_block = self.serial_window.pop(table_data)
@@ -118,4 +111,3 @@ class SchemaSerializer(TableSerializer):
             serial_block = self.serial_window.pop(table_data)
             yield serial_block
             
-
