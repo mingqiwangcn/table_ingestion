@@ -1,7 +1,7 @@
 import os
 import argparse
 import json
-from trainer import read_config, read_tables, retr_triples
+from trainer import read_config, retr_triples
 import util
 
 def get_args():
@@ -18,9 +18,12 @@ def main():
     config = read_config()
     config['text_maxlength'] = util.Max_Seq_Length
     test_query_dir = os.path.join(args.work_dir, 'data', args.dataset, 'query', 'test')
-    table_dict = read_tables(args.work_dir, args.dataset)
+    out_dir = os.path.join(test_query_dir, args.strategy)
+    if os.path.isdir(out_dir):
+        print(f'{out_dir} already exists.')
+        return
     retr_triples('test', args.work_dir, args.dataset, 
-                 test_query_dir, table_dict, False, 
+                 test_query_dir, None, False, 
                  config, strategy=args.strategy, use_tag=False, 
                  n_probe=args.n_probe)
 
