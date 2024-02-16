@@ -17,6 +17,9 @@ def main():
     args = get_args()
     config = read_config()
     config['text_maxlength'] = util.Max_Seq_Length
+    config['index_type'] = 'exact'
+    config['exact_index_dir'] = os.path.abspath(f'./output/{args.dataset}/{args.strategy}/')
+    config['query_batch'] = 10000
     test_query_dir = os.path.join(args.work_dir, 'data', args.dataset, 'query', 'test')
     out_dir = os.path.join(test_query_dir, args.strategy)
     if os.path.isdir(out_dir):
