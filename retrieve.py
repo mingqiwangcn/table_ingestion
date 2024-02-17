@@ -20,6 +20,7 @@ def main():
     config['index_type'] = 'exact'
     config['exact_index_dir'] = os.path.abspath(f'./output/{args.dataset}/{args.strategy}/')
     config['query_batch'] = 10000
+    config['min_tables'] = 1
     test_query_dir = os.path.join(args.work_dir, 'data', args.dataset, 'query', 'test')
     out_dir = os.path.join(test_query_dir, args.strategy)
     if os.path.isdir(out_dir):
