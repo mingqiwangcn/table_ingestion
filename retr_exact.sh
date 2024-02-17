@@ -1,5 +1,5 @@
 if [ "$#" -ne 2 ]; then
-    echo "Usage: ./retr.sh <dataset> <strategy>"
+    echo "Usage: ./retr_exact.sh <dataset> <strategy>"
     exit
 fi
 work_dir="$(dirname "$PWD")"
@@ -10,3 +10,4 @@ python retrieve.py \
     --work_dir ${work_dir} \
     --dataset ${dataset} \
     --strategy ${strategy} \
+    --index_type exact

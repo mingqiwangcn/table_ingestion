@@ -9,6 +9,7 @@ def get_args():
     parser.add_argument('--work_dir', type=str, required=True)
     parser.add_argument('--dataset', type=str, required=True)
     parser.add_argument('--strategy', type=str, required=True)
+    parser.add_argument('--index_type', type=str)
     parser.add_argument('--n_probe', type=int)
     args = parser.parse_args()
     return args
@@ -17,10 +18,14 @@ def main():
     args = get_args()
     config = read_config()
     config['text_maxlength'] = util.Max_Seq_Length
-    config['index_type'] = 'exact'
-    config['exact_index_dir'] = os.path.abspath(f'./output/{args.dataset}/{args.strategy}/')
-    config['query_batch'] = 10000
     config['min_tables'] = 1
+    if args.index_type is not None:
+        config['index_type'] = args.index_type
+        config['exact_index_dir'] = os.path.abspath(f'./output/{args.dataset}/{args.strategy}/')
+        config['query_batch'] = 10000
+    else:
+        assert (args.n_probe is not None)
+
     test_query_dir = os.path.join(args.work_dir, 'data', args.dataset, 'query', 'test')
     out_dir = os.path.join(test_query_dir, args.strategy)
     if os.path.isdir(out_dir):
