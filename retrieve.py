@@ -9,7 +9,7 @@ def get_args():
     parser.add_argument('--work_dir', type=str, required=True)
     parser.add_argument('--dataset', type=str, required=True)
     parser.add_argument('--strategy', type=str, required=True)
-    parser.add_argument('--n_probe', type=int, required=True)
+    parser.add_argument('--n_probe', type=int)
     args = parser.parse_args()
     return args
 
