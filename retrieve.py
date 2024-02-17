@@ -27,7 +27,10 @@ def main():
         assert (args.n_probe is not None)
 
     test_query_dir = os.path.join(args.work_dir, 'data', args.dataset, 'query', 'test')
-    out_dir = os.path.join(test_query_dir, args.strategy)
+    if args.index_type is not None:
+        out_dir = os.path.join(test_query_dir, args.strategy, args.index_type)
+    else:
+        out_dir = os.path.join(test_query_dir, args.strategy)
     if os.path.isdir(out_dir):
         print(f'{out_dir} already exists.')
         return
