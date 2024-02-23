@@ -146,6 +146,8 @@ def is_bool(text):
 
 def is_polygon(text):
     text = text.strip().lower()
+    if text == '':
+        return False
     if text[0] == '"' and text[-1] == '"':
         text = text[1:-1]
     polygon_sub_str = 'multipolygon'
