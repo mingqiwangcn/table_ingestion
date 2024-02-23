@@ -1,0 +1,5 @@
+You are given 1) a table with table caption and table data, 2) specific column numbers, and 3) a specific row from the table. 
+Instructions:
+1) Generate a question based on the given column that can be answered by the given row.
+2) Each output line is JSON object in the format
+question number | question
