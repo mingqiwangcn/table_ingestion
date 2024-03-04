@@ -1,5 +1,5 @@
-You are given 1) a table with table caption and table data 2) some sql staements form this table. 
+You are given 1) a table with table caption and table data 2) some sql statements from this table. 
 Instructions:
 1) Translate sqls into natural language questions.
 2) Each output line is jSON object in the format
-question number | natual language question
+question number | natural language question

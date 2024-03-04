@@ -1,6 +1,6 @@
 You are given 1) a table with table caption and table data, 2) specific column names, and 3) a specific row from the table. 
 Instructions:
-1) Generate a question based on the given column that can be answered by the data in given row.
+1) Generate a question based on the given columns that can be answered by the data in given row.
 2) Each output line is JSON object in the format: question number | question
 An example is provided below:
 ```json\nquestion number | "question"\nquestion number | "question"\n```

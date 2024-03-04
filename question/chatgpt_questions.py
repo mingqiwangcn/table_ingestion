@@ -40,10 +40,7 @@ class ChatGptGenerator:
         self.sql_op_lst = [SqlOP.eq, SqlOP.greater, SqlOP.less, SqlOP.between]
         
     def init_prompt(self, prompt_dir):
-        if self.prompt_method == 'sql':
-            file_pattern = os.path.join(prompt_dir, 'general.pmt')
-        else:
-            file_pattern = os.path.join(prompt_dir, 'onecell.pmt')
+        file_pattern = os.path.join(prompt_dir, f'{self.prompt_method}.pmt')
         prompt_file_lst = glob.glob(file_pattern)
         self.start_prompt_lst = []
         for prompt_file in prompt_file_lst:
@@ -256,9 +253,13 @@ class ChatGptGenerator:
         col_lst = list(range(len(col_data)))
 
         for n_question in range(self.q_size_per_table):
-            col_samples = random.sample(col_lst, 1)
-            sel_col = col_samples[0]
-            sel_col_name = col_data[sel_col]['gpt_text']
+            num_col_lst = [1, 2, 3]
+            if max(num_col_lst) > len(col_lst):
+                num_col_lst = [2]
+            num_col_sample = random.sample(num_col_lst, 1)[0]
+            sel_cols = random.sample(col_lst, num_col_sample)
+            sel_col_name = [col_data[a]['gpt_text'] for a in sel_cols]
+            
             row = random.sample(row_lst, 1)[0] 
             row_item = row_data[row]
             cell_lst = row_item['cells']
@@ -272,7 +273,7 @@ class ChatGptGenerator:
                     'table_id':table_data['tableId'],
                     'title':table_data['documentTitle'],
                     'row':row,
-                    'sel_col':sel_col,
+                    'sel_col':sel_cols,
                     'sel_col_name':sel_col_name,
                 }
                 col_row_info = {'id':str(uuid.uuid4()), 'meta':meta, 'prompt': \
@@ -297,7 +298,7 @@ class ChatGptGenerator:
         self.process_row_cells(table_data)
         util.infer_col_type(table_data)
 
-        if self.prompt_method == 'sql':
+        if self.prompt_method == 'general':
             prompt, prompt_lst = self.sql_lst_prompts(prompt, table_data, num_tokens)
             prompt += self.prompt_sql_tag
         else: 
