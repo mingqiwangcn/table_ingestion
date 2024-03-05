@@ -26,6 +26,8 @@ class AgreeCodingSerializer(TableSerializer):
                 for j in range(num_class_row):
                     right_row_class_set = row_data[j]['row_class_set']
                     inter_class_set = left_row_class_set.intersection(right_row_class_set)
+                    if len(inter_class_set) == 0:
+                        continue
                     inter_class_lst = list(inter_class_set)
                     inter_class_lst.sort()
                     agr_key = ','.join(inter_class_lst)
@@ -34,7 +36,14 @@ class AgreeCodingSerializer(TableSerializer):
                     agr_row_set = agr_dict[agr_key]['agr_row_set']
                     agr_row_set.add(i)
                     agr_row_set.add(j)
-        return agr_dict
+       
+        strip_dict = {}
+        for key in agr_dict:
+            agr_item = agr_dict[key]
+            if len(agr_item['agr_row_set']) <= 1:
+                continue
+            strip_dict[key] = agr_item
+        return strip_dict
 
     def make_coding_plan(self, agr_dict, table_data):
         return
