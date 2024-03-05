@@ -6,6 +6,7 @@ from serial_schema import SchemaSerializer
 from serial_compress import CompressSerializer
 from serial_numeric import NumericSerializer
 from serial_cpr_scm import CprScmSerializer 
+from serial_agree_coding import AgreeCodingSerializer
 import multiprocessing
 from multiprocessing import Pool as ProcessPool
 import argparse
@@ -24,28 +25,6 @@ def get_table_files(args):
     file_lst = glob.glob(file_pattern)
     return file_lst
 
-def chunk_table(table_data, chunk_size):
-    temp_data = {}
-    for key in table_data:
-        if key == 'rows':
-            temp_data[key] = []
-        temp_data[key] = table_data[key]
-
-    row_data = table_data['rows']
-    row_cnt = len(row_data)
-    if row_cnt <= chunk_size:
-        return [table_data]
-
-    table_data_lst = []
-    for offset in range(0, row_cnt, chunk_size):
-        pos = offset + chunk_size
-        batch_row_data = row_data[offset:pos]
-        batch_table_data = copy.deepcopy(temp_data) 
-        temp_data['rows'] = batch_row_data
-        table_data_lst.append(temp_data) 
-
-    return table_data_lst
-
 def init_worker(args):
     global tsl
     if args.strategy == 'block':
@@ -59,6 +38,8 @@ def init_worker(args):
         tsl.set_numeric_serializer(NumericSerializer()) 
     elif args.strategy == 'cpr_scm':
         tsl = CprScmSerializer()
+    elif args.strategy == 'agree_coding':
+        tsl = AgreeCodingSerializer()
     else:
         raise ValueError('Strategy (%s) not supported.' % args.strategy)
 
