@@ -2,6 +2,9 @@ from tqdm import tqdm
 import util
 from context_window import ContextWindow
 from serial import TableSerializer
+import time
+import torch
+import heapq
 
 class AgreeCodingSerializer(TableSerializer):
     def __init__(self):
@@ -9,44 +12,68 @@ class AgreeCodingSerializer(TableSerializer):
         self.numeric_serializer = None
 
     def do_serialize(self, table_data):
+        print('start compute agr set')
         agr_dict = self.compute_agree_set(table_data)
-        self.make_coding_plan(agr_dict, table_data)
+        pq_agr_key_lst = self.create_agr_priority_queue(agr_dict)
+        print('agr set ok')
+        self.check_agr_key(agr_dict)
+        for _ in range(len(pq_agr_key_lst)):
+            _, agr_key = heapq.heappop(pq_agr_key_lst)
+            agr_item = agr_dict[agr_key]
+            agr_class_lst = agr_item['agr_class_lst']
+            agr_row_lst = list(agr_item['row_set'])
 
     def compute_agree_set(self, table_data):
+        print('strip ptn')
         self.create_stripped_partitions(table_data)
+        print('row eq class')
         self.compute_row_eq_class(table_data)        
+        print('maximal eq class')
         maximal_class_lst = self.compute_maximal_eq_class(table_data)
         row_data = table_data['rows']
         agr_dict = {}
-        for maximal_class in maximal_class_lst:
+        for maximal_class in tqdm(maximal_class_lst):
             class_row_lst = list(maximal_class['row_set'])
             num_class_row = len(class_row_lst)
-            for i in range(num_class_row - 1):
-                left_row_class_set = row_data[i]['row_class_set']
-                for j in range(num_class_row):
-                    right_row_class_set = row_data[j]['row_class_set']
-                    inter_class_set = left_row_class_set.intersection(right_row_class_set)
-                    if len(inter_class_set) == 0:
-                        continue
-                    inter_class_lst = list(inter_class_set)
-                    inter_class_lst.sort()
-                    agr_key = ','.join(inter_class_lst)
-                    if agr_key not in agr_dict:
-                        agr_dict[agr_key] = {'agr_class_lst':inter_class_lst, 'agr_row_set':set()}
-                    agr_row_set = agr_dict[agr_key]['agr_row_set']
-                    agr_row_set.add(i)
-                    agr_row_set.add(j)
-       
-        strip_dict = {}
-        for key in agr_dict:
-            agr_item = agr_dict[key]
-            if len(agr_item['agr_row_set']) <= 1:
-                continue
-            strip_dict[key] = agr_item
-        return strip_dict
+            union_row_class_set = set()
+            for row in class_row_lst:
+                union_row_class_set.update(row_data[row]['row_class_set'])
+            union_row_class_lst = list(union_row_class_set)
+            union_row_class_lst.sort()
 
-    def make_coding_plan(self, agr_dict, table_data):
-        return
+            class_mask_lst = []
+            for row in class_row_lst:
+                row_class_set = row_data[row]['row_class_set']
+                row_class_mask = [int(a in row_class_set) for a in union_row_class_lst]
+                class_mask_lst.append(row_class_mask)
+            
+            class_set_mask = torch.tensor(class_mask_lst, dtype=torch.uint8) 
+            agr_mask = torch.einsum('ij,jk->ikj', class_set_mask, class_set_mask.t())
+            self.agr_mask_to_set(agr_dict, agr_mask, class_row_lst, union_row_class_lst)
+        return agr_dict
+
+    def agr_mask_to_set(self, agr_dict, agr_mask, class_row_lst, union_row_class_lst):
+        num_tuple = agr_mask.shape[0]
+        for i in range(num_tuple-1):
+            for j in range(i+1, num_tuple):
+                mask_array = agr_mask[i][j].numpy()
+                agr_class_lst = [union_row_class_lst[offset] for offset, a in enumerate(mask_array) if a == 1] 
+                agr_key = ','.join(agr_class_lst)
+                if agr_key not in agr_dict:
+                    agr_dict[agr_key] = {'agr_class_lst':agr_class_lst, 'row_set':set()}
+                row_set = agr_dict[agr_key]['row_set']
+                row_set.add(class_row_lst[i])
+                row_set.add(class_row_lst[j])
+
+    def create_agr_priority_queue(self, agr_dict):
+        pq_item_lst = []
+        for agr_key in agr_dict:
+            agr_class_lst = agr_dict[agr_key]['agr_class_lst']
+            agr_size = len(agr_class_lst)
+            pq_item = (-agr_size, agr_key)
+            pq_item_lst.append(pq_item)
+        heapq.heapify(pq_item_lst)
+        return pq_item_lst 
 
     def get_table_eq_classes(self, table_data):
         table_eq_class_dict = {}  
@@ -117,7 +144,7 @@ class AgreeCodingSerializer(TableSerializer):
                     ptn_dict[key] = {'rows':[]}
                 row_lst = ptn_dict[key]['rows']
                 row_lst.append(row)
-            
+
             eq_class_lst = []
             class_id = 0
             for key in ptn_dict:
@@ -132,3 +159,4 @@ class AgreeCodingSerializer(TableSerializer):
                 class_id += 1
                 eq_class_lst.append(eq_class)
             col_item['eq_class_lst'] = eq_class_lst
+
