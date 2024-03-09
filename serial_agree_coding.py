@@ -15,13 +15,43 @@ class AgreeCodingSerializer(TableSerializer):
         print('start compute agr set')
         agr_dict = self.compute_agree_set(table_data)
         pq_agr_key_lst = self.create_agr_priority_queue(agr_dict)
+        t2 = time.time()
         print('agr set ok')
-        self.check_agr_key(agr_dict)
+        #self.check_agr_key(agr_dict)
         for _ in range(len(pq_agr_key_lst)):
             _, agr_key = heapq.heappop(pq_agr_key_lst)
             agr_item = agr_dict[agr_key]
             agr_class_lst = agr_item['agr_class_lst']
             agr_row_lst = list(agr_item['row_set'])
+
+    def check_agr_key(self, agr_dict):
+        key_lst = list(agr_dict.keys())
+        N = len(key_lst)
+        pair_dict = {}
+        for i in range(N):
+            key_1 = key_lst[i]
+            agr_class_1 = set(agr_dict[key_1]['agr_class_lst']) 
+            set_1 = agr_dict[key_1]['row_set']
+            for j in range(N):
+                if i == j:
+                    continue
+
+                pair = (i, j) if i < j else (j, i)
+                if pair in pair_dict:
+                    continue
+                
+                pair_dict[pair] = True
+                key_2 = key_lst[j]
+                agr_class_2 = set(agr_dict[key_2]['agr_class_lst']) 
+                set_2 = agr_dict[key_2]['row_set']
+                
+                if len(set_1.intersection(set_2)) > 1:
+                    if agr_class_1.issubset(agr_class_2):
+                        key_msg = key_1 + '   ' + key_2
+                    else:
+                        key_msg = key_2 + '   ' + key_1
+                
+                    print(key_msg)
 
     def compute_agree_set(self, table_data):
         print('strip ptn')
@@ -53,17 +83,34 @@ class AgreeCodingSerializer(TableSerializer):
         return agr_dict
 
     def agr_mask_to_set(self, agr_dict, agr_mask, class_row_lst, union_row_class_lst):
+        tuple_dict = {}
         num_tuple = agr_mask.shape[0]
+        #print('loop 1')
         for i in range(num_tuple-1):
             for j in range(i+1, num_tuple):
                 mask_array = agr_mask[i][j].numpy()
-                agr_class_lst = [union_row_class_lst[offset] for offset, a in enumerate(mask_array) if a == 1] 
-                agr_key = ','.join(agr_class_lst)
-                if agr_key not in agr_dict:
-                    agr_dict[agr_key] = {'agr_class_lst':agr_class_lst, 'row_set':set()}
-                row_set = agr_dict[agr_key]['row_set']
+                #agr_class_lst = [union_row_class_lst[offset] for offset, a in enumerate(mask_array) if a == 1] 
+                #agr_key = ','.join(agr_class_lst)
+                tuple_key = tuple(mask_array)
+                if tuple_key not in tuple_dict:
+                    tuple_dict[tuple_key] = {'row_set':set()}
+                row_set = tuple_dict[tuple_key]['row_set']
                 row_set.add(class_row_lst[i])
                 row_set.add(class_row_lst[j])
+        
+        #print('loop 2')
+
+        for tuple_key in tuple_dict:
+            tuple_row_set = tuple_dict[tuple_key]['row_set']
+            tuple_mask = list(tuple_key)
+            agr_class_lst = [union_row_class_lst[offset] for offset, a in enumerate(tuple_mask) if a == 1] 
+            agr_key = ','.join(agr_class_lst)
+            if agr_key not in agr_dict:
+                agr_dict[agr_key] = {'agr_class_lst':agr_class_lst, 'row_set':tuple_row_set}
+            else:    
+                agr_row_set = agr_dict[agr_key]['row_set']
+                agr_row_set.update(tuple_row_set)
+        #print('loop 3')
 
     def create_agr_priority_queue(self, agr_dict):
         pq_item_lst = []
