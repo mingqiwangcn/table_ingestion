@@ -4,7 +4,6 @@ from context_window import ContextWindow
 from serial import TableSerializer
 import time
 import torch
-import heapq
 
 class AgreeCodingSerializer(TableSerializer):
     def __init__(self):
@@ -14,15 +13,38 @@ class AgreeCodingSerializer(TableSerializer):
     def do_serialize(self, table_data):
         print('start compute agr set')
         agr_dict = self.compute_agree_set(table_data)
-        pq_agr_key_lst = self.create_agr_priority_queue(agr_dict)
-        t2 = time.time()
         print('agr set ok')
-        #self.check_agr_key(agr_dict)
+
+    def create_agr_priority_queue(self, agr_dict):
+        pq_item_lst = []
+        for agr_key in agr_dict:
+            agr_class_lst = agr_dict[agr_key]['agr_class_lst']
+            agr_size = len(agr_class_lst)
+            pq_item = (-agr_size, agr_key)
+            pq_item_lst.append(pq_item)
+        heapq.heapify(pq_item_lst)
+        return pq_item_lst
+
+    def agr_class_to_col_group(self, agr_class_lst):
+        col_group = []
+        for agr_class in agr_class_lst:
+            col = int(agr_class.split('-')[0])
+            col_group.append(col)
+        return col_group
+    
+    def split_columns(self, agr_col_group, table_data):
+        schema_lst = []
+        col_data = table_data['columns']
+         
+
+    def get_schema_groups(self, pq_agr_key_lst, agr_dict, table_data):
+        col_group_dict = {}
         for _ in range(len(pq_agr_key_lst)):
             _, agr_key = heapq.heappop(pq_agr_key_lst)
             agr_item = agr_dict[agr_key]
-            agr_class_lst = agr_item['agr_class_lst']
-            agr_row_lst = list(agr_item['row_set'])
+            agr_class_lst = agr_item['agr_class_lst'] # already sorted by col index
+            agr_col_group = self.agr_class_to_col_group(agr_class_lst)
+             
 
     def check_agr_key(self, agr_dict):
         key_lst = list(agr_dict.keys())
@@ -85,12 +107,9 @@ class AgreeCodingSerializer(TableSerializer):
     def agr_mask_to_set(self, agr_dict, agr_mask, class_row_lst, union_row_class_lst):
         tuple_dict = {}
         num_tuple = agr_mask.shape[0]
-        #print('loop 1')
         for i in range(num_tuple-1):
             for j in range(i+1, num_tuple):
                 mask_array = agr_mask[i][j].numpy()
-                #agr_class_lst = [union_row_class_lst[offset] for offset, a in enumerate(mask_array) if a == 1] 
-                #agr_key = ','.join(agr_class_lst)
                 tuple_key = tuple(mask_array)
                 if tuple_key not in tuple_dict:
                     tuple_dict[tuple_key] = {'row_set':set()}
@@ -98,8 +117,6 @@ class AgreeCodingSerializer(TableSerializer):
                 row_set.add(class_row_lst[i])
                 row_set.add(class_row_lst[j])
         
-        #print('loop 2')
-
         for tuple_key in tuple_dict:
             tuple_row_set = tuple_dict[tuple_key]['row_set']
             tuple_mask = list(tuple_key)
@@ -110,17 +127,6 @@ class AgreeCodingSerializer(TableSerializer):
             else:    
                 agr_row_set = agr_dict[agr_key]['row_set']
                 agr_row_set.update(tuple_row_set)
-        #print('loop 3')
-
-    def create_agr_priority_queue(self, agr_dict):
-        pq_item_lst = []
-        for agr_key in agr_dict:
-            agr_class_lst = agr_dict[agr_key]['agr_class_lst']
-            agr_size = len(agr_class_lst)
-            pq_item = (-agr_size, agr_key)
-            pq_item_lst.append(pq_item)
-        heapq.heapify(pq_item_lst)
-        return pq_item_lst 
 
     def get_table_eq_classes(self, table_data):
         table_eq_class_dict = {}  
