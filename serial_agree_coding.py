@@ -15,31 +15,48 @@ class AgreeCodingSerializer(TableSerializer):
         agr_dict = self.compute_agree_set(table_data)
         print('agr set ok')
         attr_group_dict = self.compute_agr_attrs(agr_dict, table_data)
-        self.compute_max_disjoint_attr_sets(attr_group_dict)
-        self.split_columns(attr_group_dict, table_data)
-
-        col_group_dict = {}
-        pq_agr_key_lst = self.create_agr_priority_queue(agr_dict)
-        for _ in range(len(pq_agr_key_lst)):
-            _, agr_key = heapq.heappop(pq_agr_key_lst)
-            agr_item = agr_dict[agr_key]
-            agr_class_lst = agr_item['agr_class_lst'] # already sorted by col index
-            agr_col_group = self.agr_class_to_col_group(agr_class_lst)
-            tuple_key = tuple(agr_col_group)
-            if tuple_key not in col_group_dict:
-                block_lst = self.split_columns(agr_col_group, table_data)
-                col_group_dict[tuple_key] = {'schema_blocks':block_lst}
+        schema_block_lst = self.split_columns(attr_group_dict, table_data)
+        self.assign_agr_key_to_schema_block(schema_col_lst, agr_dict)
+        for schema_block in schema_block_lst:
+            yield from self.serialize_schema_block(table_data, schema_block, agr_dict)
+  
+    def assign_agr_key_to_schema_block(self, schema_block_lst, agr_dict):
+        agr_key_to_assign_set = set(agr_dict.keys())
+        for schema_block in schema_block_lst:
+            block_agr_map = {}
+            schema_block['agr_map'] = block_agr_map
+            schema_col_group_lst = schema_block['cols']
+            schema_col_lst = []
+            for col_group in schema_col_group_lst:
+                schema_col_lst.extend(col_group)
+            schema_col_set = set(schema_col_lst)
+            exact_matched_key_lst = []
+            for key in agr_key_to_assign_set:
+                agr_item = agr_dict[key]
+                agr_class_lst = agr_item['agr_class_lst']
+                agr_col_group = self.agr_class_to_col_group(agr_class_lst)
+                agr_col_set = set(agr_col_group)
+                inter_set = agr_col_set.intersection(schema_col_set)
+                if len(inter_set) == 0:
+                    continue
+                matched_offset = None
+                if agr_col_group in schema_col_group_lst:
+                    matched_offset = schema_col_group_lst.index(agr_col_group)
+                    exact_matched_key_lst.append(key)
+                block_agr_map[key] = {'matched_offset':matched_offset, 'col_group':col_group} 
             
-            schema_block_lst = col_group_dict[tuple_key]['schema_blocks']
-            for schema_block in schema_block_lst:
-                row_lst = list(agr_item['row_set'])
-                yield from self.serialize_schema_block(table_data, schema_block, agr_item) 
+            for matched_key in exact_matched_key_lst:
+                agr_key_to_assign_set.remove(matched_key)
 
-    def serialize_schema_block(table_data, schema_block, row_lst):
+    def serialize_schema_block(table_data, schema_block, agr_dict):
         schema_text = self.get_window_schema_text(table_data, schema_block)
         self.serial_window.set_schema_text(schema_text)
-        yield from self.get_wnd_block(table_data, schema_block, row_lst)
-   
+        yield from self.get_wnd_block(table_data, schema_block, agr_dict)
+  
+    def get_window_schema_text(self, table_data, schema_block):
+        schema_text = table_data['documentTitle'] + ' ' + self.tokenizer.sep_token + schema_block['text']
+        return schema_text
+
     def get_serial_text(self, table_data, row, col_group, last_in_block):
         col_data = table_data['columns']
         first_col = col_group[0]
@@ -81,13 +98,20 @@ class AgreeCodingSerializer(TableSerializer):
                 pre_cell['updated_serial_text'] = serial_text
                 pre_cell['updated_serial_size'] =serial_size
 
-    def get_wnd_block(self, table_data, schema_block, row_lst):
-        block_groups = schema_block['col_groups']
-        for row in row_lst:
-            for offset, col_group in enumerate(block_groups):
-                last_in_block = (offset == len(block_groups))
+    def get_wnd_block(self, table_data, schema_block, agr_dict):
+        block_agr_map = schema_block['agr_map']
+        serial_agr_key_lst = self.create_agr_priority_queue(agr_dict, list(block_agr_map.keys()))
+        for _ in range(len(serial_agr_key_lst)):
+            _, agr_key = heapq.heappop(serial_agr_key_lst)
+            agr_item = agr_dict[agr_key]
+            row_lst = list(agr_item['row_set'])
+            
+            agr_map = block_agr_map[agr_key]
+            matched_offset = agr_map['matched_offset']
+            agr_col_group = agr_map['col_group'] 
+            last_offset = len(schema_col_group_lst) - 1
+            for row in row_lst:
                 serial_text, serial_size = self.get_serial_text(table_data, row, col_group, last_in_block)
-                first_col = col_group[0]
                 if self.serial_window.can_add(table_data, row, first_col, serial_text, serial_size):
                     self.serial_window.add(table_data, row, first_col)
                 else:
@@ -95,13 +119,14 @@ class AgreeCodingSerializer(TableSerializer):
                     yield serial_block
                     self.serial_window.add(table_data, row, first_col)
 
+
         if self.serial_window.can_pop():
             serial_block = self.serial_window.pop(table_data)
             yield serial_block
 
-    def create_agr_priority_queue(self, agr_dict):
+    def create_agr_priority_queue(self, agr_dict, agr_key_lst):
         pq_item_lst = []
-        for agr_key in agr_dict:
+        for agr_key in agr_key_lst:
             agr_class_lst = agr_dict[agr_key]['agr_class_lst']
             agr_size = len(agr_class_lst)
             pq_item = (-agr_size, agr_key)
@@ -172,46 +197,68 @@ class AgreeCodingSerializer(TableSerializer):
             attr_set_lst.append(attr_set)
 
         max_disjoint_sets = util.set_packing(attr_set_lst)
-        import pdb; pdb.set_trace()
         return max_disjoint_sets
+
+    def col_to_max_attr_set(self, attr_set_lst):
+        col_set_dict = {}
+        for attr_set in attr_set_lst:
+            for col in attr_set:
+                col_set_dict[col] = attr_set
+        return col_set_dict
+    
+    def get_column_serial(self, col_data, col_group):
+        col_name_lst = [col_data[a]['text'] for a in col_group] 
+        serial_text = ' & '.join(col_name_lst) + ' | '
+        serial_size = sum([col_data[a]['size'] for a in col_group]) + len(col_name_lst) 
+        return (serial_text, serial_size)
 
     # Use a single partition for all to share schema. 
     # Try to put agree groups in the same schema group
     def split_columns(self, attr_group_dict, table_data):
         col_data = table_data['columns']
         block_lst = []
+        col_group_lst = [] 
         block_col_set = set()
         block_text = ''
         block_size = 0
        
-        max_size = int(self.serial_window.wnd_size * util.Max_Header_Meta_Ratio)
-        for col, col_info in enumerate(col_data):
-             
-            col_name = col_info['text'] 
-            serial_text = self.get_schema_column_text(col_name) 
-            serial_size = util.get_token_size(self.tokenizer, serial_text)
-            if block_size + serial_size <= max_size:
-                block_cols.append(offset)
-                block_text += ' ' + serial_text
+        max_disjoint_attr_sets = self.compute_max_disjoint_attr_sets(attr_group_dict)
+        col_max_set_dict = self.col_to_max_attr_set(max_disjoint_attr_sets)
+        
+        Schema_Max_Size = int(self.serial_window.wnd_size * util.Max_Header_Meta_Ratio)
+        for col, _ in enumerate(col_data):
+            if col in block_col_set:
+                continue # col may be already included by attr set
+            col_group = []
+            if col in col_max_set_dict:
+                attr_set = col_max_set_dict[col]
+                col_group = list(attr_set)
+                col_group.sort()
+            else:
+                col_group = [col]
+            serial_text, serial_size = self.get_column_serial(col_data, col_group)
+            if block_size + serial_size <= Schema_Max_Size:
+                col_group_lst.append(col_group)
+                block_col_set.update(set(col_group))
+                block_text += serial_text
                 block_size += serial_size
             else:
                 block_info = self.get_block_info(block_cols, block_text, block_size)
                 block_lst.append(block_info)
-                block_cols = [offset]
+                col_group_lst = [col_group]
+                block_col_set.update(set(col_group))
                 block_text = serial_text
                 block_size = serial_size
 
         if block_size > 0:
-            block_info = self.get_block_info(block_cols, block_text, block_size)
+            block_info = self.get_block_info(col_group_lst, block_text, block_size)
             block_lst.append(block_info)
         return block_lst 
 
-
-    def get_block_info(self, block_groups, block_text, block_size):
-        assert block_text[-1] == ';'
-        updated_block_text = block_text[:-1] + self.tokenizer.sep_token
+    def get_block_info(self, col_group_lst, block_text, block_size):
+        updated_block_text = block_text.rstrip()[:-1] + self.tokenizer.sep_token
         block_info = {
-            'col_groups':block_cols,
+            'cols':col_group_lst,
             'text':updated_block_text,
             'size':block_size
         }
