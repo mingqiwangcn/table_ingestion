@@ -165,7 +165,10 @@ class AgreeCodingSerializer(TableSerializer):
         attr_set_lst = []  
         for key in attr_group_dict:
             attr_group = attr_group_dict[key]
-            attr_set = (set(attr_group['group']), attr_group['agr_size'])
+            group = attr_group['group']
+            if len(group) < 2:
+                continue
+            attr_set = (set(group), attr_group['agr_size'])
             attr_set_lst.append(attr_set)
 
         max_disjoint_sets = util.set_packing(attr_set_lst)

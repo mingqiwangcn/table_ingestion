@@ -231,7 +231,7 @@ def set_packing(set_lst):
         over_lapped = False
         for pd_set in pd_set_lst:
             sub_set = pd_set.intersection(input_set) 
-            if len(sub_set) > 1:
+            if len(sub_set) > 0:
                 over_lapped = True
                 break
         if not over_lapped:
