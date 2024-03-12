@@ -14,7 +14,10 @@ class AgreeCodingSerializer(TableSerializer):
         print('start compute agr set')
         agr_dict = self.compute_agree_set(table_data)
         print('agr set ok')
-        
+        attr_group_dict = self.compute_agr_attrs(agr_dict, table_data)
+        self.compute_max_disjoint_attr_sets(attr_group_dict)
+        self.split_columns(attr_group_dict, table_data)
+
         col_group_dict = {}
         pq_agr_key_lst = self.create_agr_priority_queue(agr_dict)
         for _ in range(len(pq_agr_key_lst)):
@@ -125,34 +128,81 @@ class AgreeCodingSerializer(TableSerializer):
                 col_group = [col]
             col_group_lst.append(col_group)
         return col_group_lst
-   
+  
+    def compute_agr_attrs(self, agr_dict, table_data):
+        attr_group_dict = {}
+        row_data = table_data['rows']
+        for key in agr_dict:
+            agr_item = agr_dict[key]
+            agr_class_lst = agr_item['agr_class_lst']
+            row_set = agr_item['row_set']
+            num_rows = len(row_set)
+            rep_row = next(iter(row_set)) 
+            size_lst = []
+            col_lst = []
+            for agr_class in agr_class_lst:
+                col = int(agr_class.split('-')[0])
+                col_lst.append(col)
+                size = row_data[rep_row]['cells'][col]['size']
+                size_lst.append(size)
+
+            agr_size = sum(size_lst) * num_rows
+            attr_tuple = tuple(col_lst)
+            if attr_tuple not in attr_group_dict:
+                attr_group_dict[attr_tuple] = {'group':col_lst, 'row_set':set(), 'agr_size':0}
+
+            attr_group = attr_group_dict[attr_tuple]
+            attr_group['agr_size'] += agr_size
+            attr_group['row_set'].update(row_set)
+
+        for group_key in attr_group_dict:
+            group_item = attr_group_dict[group_key]
+            group_item['row_percent'] = len(group_item['row_set']) / len(row_data)
+            del group_item['row_set']
+        return attr_group_dict
+
+    def compute_max_disjoint_attr_sets(self, attr_group_dict):
+        attr_set_lst = []  
+        for key in attr_group_dict:
+            attr_group = attr_group_dict[key]
+            attr_set = (set(attr_group['group']), attr_group['agr_size'])
+            attr_set_lst.append(attr_set)
+
+        max_disjoint_sets = util.set_packing(attr_set_lst)
+        import pdb; pdb.set_trace()
+        return max_disjoint_sets
+
     # Use a single partition for all to share schema. 
     # Try to put agree groups in the same schema group
-    def split_columns(self, agr_dict, table_data):
-        block_lst = []
-        block_groups = []
-        block_size = 0
+    def split_columns(self, attr_group_dict, table_data):
         col_data = table_data['columns']
-        col_group_lst = self.get_col_groups(agr_col_group, table_data)
+        block_lst = []
+        block_col_set = set()
+        block_text = ''
+        block_size = 0
+       
         max_size = int(self.serial_window.wnd_size * util.Max_Header_Meta_Ratio)
-        for col_group in col_group_lst:
-            group_size = sum([col_data[col]['size'] for col in col_group]) + len(col_group) - 1 # use '&' to concatenate 
-            serial_text = ' & '.join(col_data[col]['text'] for col in col_group) + ';'
-            serial_size = group_size + 1 # a sep token for each col group 
+        for col, col_info in enumerate(col_data):
+             
+            col_name = col_info['text'] 
+            serial_text = self.get_schema_column_text(col_name) 
+            serial_size = util.get_token_size(self.tokenizer, serial_text)
             if block_size + serial_size <= max_size:
-                block_groups.append(col_group)
-                block_text += serial_text
+                block_cols.append(offset)
+                block_text += ' ' + serial_text
                 block_size += serial_size
             else:
                 block_info = self.get_block_info(block_cols, block_text, block_size)
                 block_lst.append(block_info)
-                block_groups = [col_group]
+                block_cols = [offset]
                 block_text = serial_text
                 block_size = serial_size
+
         if block_size > 0:
             block_info = self.get_block_info(block_cols, block_text, block_size)
             block_lst.append(block_info)
-        return block_lst
+        return block_lst 
+
 
     def get_block_info(self, block_groups, block_text, block_size):
         assert block_text[-1] == ';'

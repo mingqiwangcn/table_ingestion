@@ -214,5 +214,26 @@ def infer_col_type(table_data):
             elif polygon_count >= 1:
                 col_info['infer_type'] = CellDataType.POLYGON
             
-        
-
+# given a list of sets with weights, find pair-wise disjoit sets suth that the total weights maximized  
+# each element of set_lst is a tuple (set, weight)
+def set_packing(set_lst):
+    rw_set_lst = []
+    for set_item in set_lst:
+        input_set = set_item[0] 
+        weight = set_item[1]
+        rw = weight / len(input_set)
+        rw_set = (input_set, rw)
+        rw_set_lst.append(rw_set)
+    sorted_set_lst = sorted(rw_set_lst, key=lambda x:x[1], reverse=True)
+    pd_set_lst = []
+    for set_item in sorted_set_lst:
+        input_set = set_item[0]
+        over_lapped = False
+        for pd_set in pd_set_lst:
+            sub_set = pd_set.intersection(input_set) 
+            if len(sub_set) > 1:
+                over_lapped = True
+                break
+        if not over_lapped:
+            pd_set_lst.append(input_set)
+    return pd_set_lst
