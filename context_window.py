@@ -17,64 +17,77 @@ class ContextWindow:
         self.schema_text = text
         self.schema_size = util.get_token_size(self.tokenizer, self.schema_text)
 
-    def can_add(self, table_data, row_idx, col_idx, serial_text, serial_size):
-        cell_info = table_data['rows'][row_idx]['cells'][col_idx]
+    def can_add(self, table_data, row, col_group_lst, serial_text, serial_size):
+        row_cells = table_data['rows'][row]['cells']
         col_data = table_data['columns']
-        col_info = col_data[col_idx]
-        token_size = serial_size #util.get_token_size(self.tokenizer, serial_text)
-        cell_info['serial_text'] = serial_text
-        cell_info['serial_size'] = token_size
-        cell_info['row'] = row_idx
-        cell_info['col'] = col_idx
+        
+        serial_info = {}
+        serial_info['text'] = serial_text
+        serial_info['size'] = serial_size
+        serial_info['row'] = row
+        serial_info['cols'] = col_group_lst
        
         code_size = 0
         updated_buffer_size = self.buffer_size
-        compress_code = cell_info.get('compress_code', None)
+        
         if self.cell_code_book is not None:
             cpr_code_size = 0
-            if compress_code is not None:
-                cpr_code_size = cell_info['cpr_code_size']
-                pre_cell_lst = cell_info['pre_cells']
-                for pre_cell in pre_cell_lst:
-                    pre_cell_size_chg = pre_cell['updated_serial_size'] - pre_cell['serial_size']                
-                    updated_buffer_size = self.buffer_size + pre_cell_size_chg 
+            for col_group in col_group_lst:
+                first_col = col_group[0]
+                cell_info = row_cells[first_col]
+                compress_code = cell_info.get('compress_code', None)
+                if compress_code is not None:
+                    cpr_code_size = cell_info['cpr_code_size']
+                    pre_cell_lst = cell_info['pre_cells']
+                    for pre_cell in pre_cell_lst:
+                        pre_cell_size_chg = pre_cell['updated_serial_size'] - pre_cell['serial_size']                
+                        updated_buffer_size += self.buffer_size + pre_cell_size_chg 
 
             code_size = self.cell_code_book.code_size + cpr_code_size 
 
-        if self.schema_size + code_size + updated_buffer_size + token_size > self.wnd_size:
+        if self.schema_size + code_size + updated_buffer_size + serial_size > self.wnd_size:
+            for col_group in col_group_lst:
+                first_col = col_group[0]
+                cell_info = row_cells[first_col]
+                compress_code = cell_info.get('compress_code', None)
+                if compress_code is not None:
+                    del cell_info['compress_code']
+                    pre_cell_lst = cell_info['pre_cells']
+                    for pre_cell in pre_cell_lst:
+                        del pre_cell['updated_serial_text']
+                        del pre_cell['updated_serial_size']
+                    del cell_info['pre_cells']
+            return False, serial_info
+        
+        return (True, serial_info)
+   
+    def add(self, table_data, serial_info):
+        self.buffer_size += serial_info['size']
+        self.text_buffer.append(serial_info)
+        row = serial_info['row']
+        col_group_lst = serial_info['cols']
+        row_cells = table_data['rows'][row]['cells']
+        for col_group in col_group_lst:
+            first_col = col_group[0]
+            cell_info = row_cells[first_col]
+            compress_code = cell_info.get('compress_code', None)
             if compress_code is not None:
-                del cell_info['compress_code']
                 pre_cell_lst = cell_info['pre_cells']
                 for pre_cell in pre_cell_lst:
-                    del pre_cell['updated_serial_text']
-                    del pre_cell['updated_serial_size']
-                del cell_info['pre_cells']
-            return False
-        return True
-   
-    def add(self, table_data, row_idx, col_idx):
-        cell_info = table_data['rows'][row_idx]['cells'][col_idx]
-        token_size = cell_info['serial_size']
-        self.buffer_size += token_size
-        self.text_buffer.append(cell_info)
-        compress_code = cell_info.get('compress_code', None)
-        if compress_code is not None:
-            pre_cell_lst = cell_info['pre_cells']
-            for pre_cell in pre_cell_lst:
-                pre_cell_size_chg = pre_cell['updated_serial_size'] - pre_cell['serial_size']                
-                self.buffer_size += pre_cell_size_chg
-                pre_cell['serial_text'] = pre_cell['updated_serial_text']
-                pre_cell['serial_size'] = pre_cell['updated_serial_size']
-            
-            self.cell_code_book.code_text += compress_code
-            self.cell_code_book.code_size += cell_info['cpr_code_size']
+                    pre_cell_size_chg = pre_cell['updated_serial_size'] - pre_cell['serial_size']                
+                    self.buffer_size += pre_cell_size_chg
+                    pre_cell['serial_text'] = pre_cell['updated_serial_text']
+                    pre_cell['serial_size'] = pre_cell['updated_serial_size']
+                
+                self.cell_code_book.code_text += compress_code
+                self.cell_code_book.code_size += cell_info['cpr_code_size']
 
     def can_pop(self):
         return len(self.text_buffer) > 0
 
     def pop(self, table_data):
         assert(len(self.text_buffer) > 0)
-        text_lst = [a['serial_text'] for a in self.text_buffer]
+        text_lst = [a['text'] for a in self.text_buffer]
         code_text = ''
         code_size = 0
         special_token_lst = None
@@ -91,7 +104,7 @@ class ContextWindow:
                 'size':out_size,
                 'table_id':table_data['tableId'],
                 'row':[a['row'] for a in self.text_buffer],
-                'col':[a['col'] for a in self.text_buffer],
+                'cols':[a['cols'] for a in self.text_buffer],
                 'special_tokens':special_token_lst,
             }
         }

@@ -5,8 +5,10 @@ class CodeBook:
         self.tokenizer = tokenizer
         self.reset()
 
-    # Let x is the size of cell text, y is the # of occurences of the cell text. Since the compressed text inlcude [E?] y times and also the text "[E?] is {cell text} [SEP]", 
-    # we must have yx > y + x + 3, so x > (y+3) / (y-1) = 1 + ( 4 / (y-1) ), which is the condition to start compression. We must tract those cells before the condition is stisfied, so that
+    # Let x is the size of cell text, y is the # of occurences of the cell text. 
+    # Since the compressed text inlcude [E?] y times and also the text "[E?] is {cell text} [SEP]", 
+    # we must have yx > y + x + 3, so x > (y+3) / (y-1) = 1 + ( 4 / (y-1) ), 
+    # which is the condition to start compression. We must tract those cells before the condition is stisfied, so that
     # we can update them with codes
     def get_code(self, cell_info, text_key='text', size_key='size'):
         text = cell_info[text_key]
