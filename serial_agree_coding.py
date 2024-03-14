@@ -4,19 +4,20 @@ from context_window import ContextWindow
 from serial import TableSerializer
 import time
 import torch
+import heapq
+from code_book import CodeBook
 
 class AgreeCodingSerializer(TableSerializer):
     def __init__(self):
         super().__init__()
         self.numeric_serializer = None
+        self.serial_window.set_cell_code_book(CodeBook(self.tokenizer))
 
     def do_serialize(self, table_data):
-        print('start compute agr set')
         agr_dict = self.compute_agree_set(table_data)
-        print('agr set ok')
         attr_group_dict = self.compute_agr_attrs(agr_dict, table_data)
         schema_block_lst = self.split_columns(attr_group_dict, table_data)
-        self.assign_agr_key_to_schema_block(schema_col_lst, agr_dict)
+        self.assign_agr_key_to_schema_block(schema_block_lst, agr_dict)
         for schema_block in schema_block_lst:
             yield from self.serialize_schema_block(table_data, schema_block, agr_dict)
   
@@ -43,12 +44,12 @@ class AgreeCodingSerializer(TableSerializer):
                 if agr_col_group in schema_col_group_lst:
                     matched_offset = schema_col_group_lst.index(agr_col_group)
                     exact_matched_key_lst.append(key)
-                block_agr_map[key] = {'matched_offset':matched_offset, 'col_group':col_group} 
+                block_agr_map[key] = {'matched_offset':matched_offset, 'col_group':agr_col_group} 
             
             for matched_key in exact_matched_key_lst:
                 agr_key_to_assign_set.remove(matched_key)
 
-    def serialize_schema_block(table_data, schema_block, agr_dict):
+    def serialize_schema_block(self, table_data, schema_block, agr_dict):
         schema_text = self.get_window_schema_text(table_data, schema_block)
         self.serial_window.set_schema_text(schema_text)
         yield from self.get_wnd_block(table_data, schema_block, agr_dict)
@@ -59,8 +60,6 @@ class AgreeCodingSerializer(TableSerializer):
 
     def get_serial_text(self, table_data, row, col_group_lst, agr_group_offset):
         col_data = table_data['columns']
-        first_col = col_group[0]
-        col_info = col_data[first_col]
         row_cells = table_data['rows'][row]['cells']
       
         serial_text = ''
@@ -68,8 +67,6 @@ class AgreeCodingSerializer(TableSerializer):
         for offset, col_group in enumerate(col_group_lst):
             first_col = col_group[0]
             cell_info = row_cells[first_col]
-            text_key = 'text'
-            size_key = 'size'
             if offset == agr_group_offset:
                 text_key = 'group_text'
                 size_key = 'group_size'
@@ -77,18 +74,28 @@ class AgreeCodingSerializer(TableSerializer):
                 cell_info[size_key] = sum([row_cells[col]['size'] for col in col_group]) + len(col_group) - 1   
                 cell_info['group_size'] = len(col_group)
 
-            cell_text, cell_size = self.get_cell_text(cell_info, text_key, size_key)
+                cell_text, cell_size = self.get_cell_text(cell_info, text_key, size_key)
             
-            cell_serial_text = cell_text + ' | '
-            cell_serial_size = cell_size + 1 
-            
-            cell_info['serial_text'] = cell_serial_text
-            cell_info['serial_size'] = cell_serial_size
-
-            serial_text += cell_serial_text
-            serial_size += cel_serial_size
-            
-            self.update_related_cell(cell_info, serial_text, serial_size)
+                cell_serial_text = cell_text + ' | '
+                cell_serial_size = cell_size + 1 
+                cell_info['serial_text'] = cell_serial_text
+                cell_info['serial_size'] = cell_serial_size
+                serial_text += cell_serial_text
+                serial_size += cell_serial_size
+                self.update_related_cell(cell_info, cell_serial_text, cell_serial_size)
+            else:
+                text_key = 'text'
+                size_key = 'size'
+                for col in col_group:
+                    cell_info = row_cells[col]
+                    cell_text, cell_size = self.get_cell_text(cell_info, text_key, size_key)
+                    cell_serial_text = cell_text + ' | '
+                    cell_serial_size = cell_size + 1 
+                    cell_info['serial_text'] = cell_serial_text
+                    cell_info['serial_size'] = cell_serial_size
+                    serial_text += cell_serial_text
+                    serial_size += cell_serial_size
+                    self.update_related_cell(cell_info, cell_serial_text, cell_serial_size)
         
         serial_text = serial_text.rstrip()[:-1] + self.tokenizer.sep_token 
         return serial_text, serial_size
@@ -107,7 +114,7 @@ class AgreeCodingSerializer(TableSerializer):
             pre_cell_lst = cell_info['pre_cells']
             for pre_cell in pre_cell_lst:
                 pre_cell['updated_serial_text'] = serial_text
-                pre_cell['updated_serial_size'] =serial_size
+                pre_cell['updated_serial_size'] = serial_size
 
     def get_wnd_block(self, table_data, schema_block, agr_dict):
         col_group_lst = schema_block['cols']
@@ -121,8 +128,8 @@ class AgreeCodingSerializer(TableSerializer):
             agr_group_offset = agr_map['matched_offset']
             agr_col_group = agr_map['col_group'] 
             for row in row_lst:
-                serial_text, serial_size = self.get_serial_text(table_data, row, col, agr_group_offset)
-                fit_ok, serial_info = self.serial_window.can_add(table_data, row, col_group_lst, serial_text, serial_size):
+                serial_text, serial_size = self.get_serial_text(table_data, row, col_group_lst, agr_group_offset)
+                fit_ok, serial_info = self.serial_window.can_add(table_data, row, col_group_lst, serial_text, serial_size)
                 if fit_ok: 
                     self.serial_window.add(table_data, serial_info)
                 else:
@@ -304,11 +311,8 @@ class AgreeCodingSerializer(TableSerializer):
                     print(key_msg)
 
     def compute_agree_set(self, table_data):
-        print('strip ptn')
         self.create_stripped_partitions(table_data)
-        print('row eq class')
         self.compute_row_eq_class(table_data)        
-        print('maximal eq class')
         maximal_class_lst = self.compute_maximal_eq_class(table_data)
         row_data = table_data['rows']
         agr_dict = {}
