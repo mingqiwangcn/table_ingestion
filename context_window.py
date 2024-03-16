@@ -33,30 +33,30 @@ class ContextWindow:
         if self.cell_code_book is not None:
             cpr_code_size = 0
             for col_group in col_group_lst:
-                first_col = col_group[0]
-                cell_info = row_cells[first_col]
-                compress_code = cell_info.get('compress_code', None)
-                if compress_code is not None:
-                    cpr_code_size = cell_info['cpr_code_size']
-                    pre_cell_lst = cell_info['pre_cells']
-                    for pre_cell in pre_cell_lst:
-                        pre_cell_size_chg = pre_cell['updated_serial_size'] - pre_cell['serial_size']                
-                        updated_buffer_size += self.buffer_size + pre_cell_size_chg 
+                for col in col_group:
+                    cell_info = row_cells[col]
+                    compress_code = cell_info.get('compress_code', None)
+                    if compress_code is not None:
+                        cpr_code_size = cell_info['cpr_code_size']
+                        pre_cell_lst = cell_info['pre_cells']
+                        for pre_cell in pre_cell_lst:
+                            pre_cell_size_chg = pre_cell['updated_serial_size'] - pre_cell['serial_size']                
+                            updated_buffer_size += self.buffer_size + pre_cell_size_chg 
 
             code_size = self.cell_code_book.code_size + cpr_code_size 
 
         if self.schema_size + code_size + updated_buffer_size + serial_size > self.wnd_size:
             for col_group in col_group_lst:
-                first_col = col_group[0]
-                cell_info = row_cells[first_col]
-                compress_code = cell_info.get('compress_code', None)
-                if compress_code is not None:
-                    del cell_info['compress_code']
-                    pre_cell_lst = cell_info['pre_cells']
-                    for pre_cell in pre_cell_lst:
-                        del pre_cell['updated_serial_text']
-                        del pre_cell['updated_serial_size']
-                    del cell_info['pre_cells']
+                for col in col_group:
+                    cell_info = row_cells[col]
+                    compress_code = cell_info.get('compress_code', None)
+                    if compress_code is not None:
+                        del cell_info['compress_code']
+                        pre_cell_lst = cell_info['pre_cells']
+                        for pre_cell in pre_cell_lst:
+                            del pre_cell['updated_serial_text']
+                            del pre_cell['updated_serial_size']
+                        del cell_info['pre_cells']
             return False, serial_info
         
         return (True, serial_info)

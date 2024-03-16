@@ -1,24 +1,20 @@
-class Item:
-    def __init__(self, key, size):
-        self.key = key
-        self.size = size
-
 class Bin:
     def __init__(self, space):
         self.space = space
         self.item_lst = []
 
     def can_fit(self, item):
-        return item.size <= self.space
+        return item[1] <= self.space
 
     def add(self, item):
-        if item.size > self.space:
+        item_size = item[1]
+        if item_size > self.space:
             raise ValueError('Not Fit')
         self.item_lst.append(item)
-        self.space -= item.size
+        self.space -= item_size
     
 #Use First-FIt (FF) algorithm
-def bin_packing(item_lst, bin_capacity):
+def bin_pack(item_lst, bin_capacity):
     bin_lst = []
     for item in item_lst:
         first_fit_bin = None
@@ -29,5 +25,10 @@ def bin_packing(item_lst, bin_capacity):
         if first_fit_bin is None:
             first_fit_bin = Bin(bin_capacity)
             bin_lst.append(first_fit_bin)
-        first_fit_bin.add(item)
+        try: 
+            first_fit_bin.add(item)
+        except:
+            import pdb; pdb.set_trace()
+            print()
+
     return bin_lst

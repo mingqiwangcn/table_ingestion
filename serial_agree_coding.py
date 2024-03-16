@@ -6,6 +6,7 @@ import time
 import torch
 import heapq
 from code_book import CodeBook
+from bin_packing import bin_pack
 
 class AgreeCodingSerializer(TableSerializer):
     def __init__(self):
@@ -120,10 +121,14 @@ class AgreeCodingSerializer(TableSerializer):
         col_group_lst = schema_block['cols']
         block_agr_map = schema_block['agr_map']
         serial_agr_key_lst = self.create_agr_priority_queue(agr_dict, list(block_agr_map.keys()))
+        
+        row_serial_done_set = set()
         for _ in range(len(serial_agr_key_lst)):
             _, agr_key = heapq.heappop(serial_agr_key_lst)
             agr_item = agr_dict[agr_key]
-            row_lst = list(agr_item['row_set'])
+            row_set_to_serial = agr_item['row_set'] - row_serial_done_set
+            row_lst = list(row_set_to_serial)
+            row_serial_done_set.update(row_set_to_serial)
             agr_map = block_agr_map[agr_key]
             agr_group_offset = agr_map['matched_offset']
             agr_col_group = agr_map['col_group'] 
@@ -236,12 +241,11 @@ class AgreeCodingSerializer(TableSerializer):
         block_lst = []
         col_group_lst = [] 
         block_col_set = set()
-        block_text = ''
-        block_size = 0
        
         max_disjoint_attr_sets = self.compute_max_disjoint_attr_sets(attr_group_dict)
         col_max_set_dict = self.col_to_max_attr_set(max_disjoint_attr_sets)
-        
+      
+        group_item_lst = []
         Schema_Max_Size = int(self.serial_window.wnd_size * util.Max_Header_Meta_Ratio)
         for col, _ in enumerate(col_data):
             if col in block_col_set:
@@ -253,21 +257,18 @@ class AgreeCodingSerializer(TableSerializer):
                 col_group.sort()
             else:
                 col_group = [col]
+            
+            block_col_set.update(set(col_group))
             serial_text, serial_size = self.get_column_serial(col_data, col_group)
-            if block_size + serial_size <= Schema_Max_Size:
-                col_group_lst.append(col_group)
-                block_col_set.update(set(col_group))
-                block_text += serial_text
-                block_size += serial_size
-            else:
-                block_info = self.get_block_info(block_cols, block_text, block_size)
-                block_lst.append(block_info)
-                col_group_lst = [col_group]
-                block_col_set.update(set(col_group))
-                block_text = serial_text
-                block_size = serial_size
-
-        if block_size > 0:
+            
+            group_item = [col_group, serial_size, serial_text]
+            group_item_lst.append(group_item)
+        
+        bin_lst = bin_pack(group_item_lst, Schema_Max_Size)
+        for bin_entry in bin_lst:
+            col_group_lst = [a[0] for a in bin_entry.item_lst]
+            block_text = ''.join([a[2] for a in bin_entry.item_lst])
+            block_size = sum([a[1] for a in bin_entry.item_lst])
             block_info = self.get_block_info(col_group_lst, block_text, block_size)
             block_lst.append(block_info)
         return block_lst 
@@ -283,6 +284,7 @@ class AgreeCodingSerializer(TableSerializer):
 
     def check_agr_key(self, agr_dict):
         key_lst = list(agr_dict.keys())
+
         N = len(key_lst)
         pair_dict = {}
         for i in range(N):
@@ -307,7 +309,6 @@ class AgreeCodingSerializer(TableSerializer):
                         key_msg = key_1 + '   ' + key_2
                     else:
                         key_msg = key_2 + '   ' + key_1
-                
                     print(key_msg)
 
     def compute_agree_set(self, table_data):
@@ -348,7 +349,7 @@ class AgreeCodingSerializer(TableSerializer):
                 row_set = tuple_dict[tuple_key]['row_set']
                 row_set.add(class_row_lst[i])
                 row_set.add(class_row_lst[j])
-        
+       
         for tuple_key in tuple_dict:
             tuple_row_set = tuple_dict[tuple_key]['row_set']
             tuple_mask = list(tuple_key)
