@@ -132,19 +132,30 @@ class AgreeCodingSerializer(TableSerializer):
             agr_map = block_agr_map[agr_key]
             agr_group_offset = agr_map['matched_offset']
             agr_col_group = agr_map['col_group'] 
-            for row in row_lst:
-                serial_text, serial_size = self.get_serial_text(table_data, row, col_group_lst, agr_group_offset)
-                fit_ok, serial_info = self.serial_window.can_add(table_data, row, col_group_lst, serial_text, serial_size)
-                if fit_ok: 
-                    self.serial_window.add(table_data, serial_info)
-                else:
-                    serial_block = self.serial_window.pop(table_data)
-                    yield serial_block
-                    self.serial_window.add(table_data, serial_info)
+            yield from self.serialize_on_row(table_data, row_lst, col_group_lst, agr_group_offset)
+
+        import pdb; pdb.set_trace()
+        row_data = table_data['rows']
+        table_row_set = set(range(len(row_data)))
+        other_row_lst = list(table_row_set - row_serial_done_set)
+        if len(other_row_lst) > 0:
+            yield from self.serialize_on_row(table_data, other_row_lst, col_group_lst, None)
 
         if self.serial_window.can_pop():
             serial_block = self.serial_window.pop(table_data)
             yield serial_block
+
+    def serialize_on_row(self, table_data, row_lst, col_group_lst, agr_group_offset):
+        for row in row_lst:
+            serial_text, serial_size = self.get_serial_text(table_data, row, col_group_lst, agr_group_offset)
+            fit_ok, serial_info = self.serial_window.can_add(table_data, row, col_group_lst, serial_text, serial_size)
+            if fit_ok: 
+                self.serial_window.add(table_data, serial_info)
+            else:
+                serial_block = self.serial_window.pop(table_data)
+                yield serial_block
+                self.serial_window.add(table_data, serial_info)
+
 
     def create_agr_priority_queue(self, agr_dict, agr_key_lst):
         pq_item_lst = []
