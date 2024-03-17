@@ -56,7 +56,7 @@ class AgreeCodingSerializer(TableSerializer):
         yield from self.get_wnd_block(table_data, schema_block, agr_dict)
   
     def get_window_schema_text(self, table_data, schema_block):
-        schema_text = table_data['documentTitle'] + ' ' + self.tokenizer.sep_token + schema_block['text']
+        schema_text = table_data['documentTitle'] + ' ' + self.tokenizer.sep_token + ' ' + schema_block['text']
         return schema_text
 
     def get_serial_text(self, table_data, row, col_group_lst, agr_group_offset):
@@ -98,7 +98,7 @@ class AgreeCodingSerializer(TableSerializer):
                     serial_size += cell_serial_size
                     self.update_related_cell(cell_info, cell_serial_text, cell_serial_size)
         
-        serial_text = serial_text.rstrip()[:-1] + self.tokenizer.sep_token 
+        serial_text = serial_text.rstrip()[:-1] + self.tokenizer.sep_token + ' ' 
         return serial_text, serial_size
 
     def get_cell_text(self, cell_info, text_key, size_key):
@@ -134,7 +134,6 @@ class AgreeCodingSerializer(TableSerializer):
             agr_col_group = agr_map['col_group'] 
             yield from self.serialize_on_row(table_data, row_lst, col_group_lst, agr_group_offset)
 
-        import pdb; pdb.set_trace()
         row_data = table_data['rows']
         table_row_set = set(range(len(row_data)))
         other_row_lst = list(table_row_set - row_serial_done_set)

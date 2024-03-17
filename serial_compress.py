@@ -27,21 +27,24 @@ class CompressSerializer(SchemaSerializer):
         for row in other_row_lst:
             yield row
 
-    def get_serial_text(self, table_data, row, col, block_cols):
+    def get_serial_text(self, table_data, row, block_cols):
         col_data = table_data['columns']
-        col_info = col_data[col]
-        is_last_cell = (col == block_cols[-1])
-        sep_token = ';' if not is_last_cell else self.tokenizer.sep_token
-        if col_info.get('ignore_row_serial', False):
-            return '', 0
-       
-        cell_info = table_data['rows'][row]['cells'][col]
-        cell_text, cell_size = self.get_cell_text(cell_info)
-        serial_text = cell_text + ' ' + sep_token + ' '
-        serial_size = cell_size + 1 
-
-        self.update_related_cell(cell_info, serial_text, serial_size)
-
+        row_cells = table_data['rows'][row]['cells']
+        
+        serial_text = ''
+        serial_size = 0
+        for col in block_cols:
+            cell_info = row_cells[col] 
+            cell_text, cell_size = self.get_cell_text(cell_info)
+            cell_serial_text = cell_text + ' | '
+            cell_serial_size = cell_size + 1 
+            cell_info['serial_text'] = cell_serial_text
+            cell_info['serial_size'] = cell_serial_size
+            serial_text += cell_serial_text
+            serial_size += cell_serial_size
+            self.update_related_cell(cell_info, serial_text, serial_size)
+        
+        serial_text = serial_text.rstrip()[:-1] + self.tokenizer.sep_token + ' '
         return serial_text, serial_size
 
     def get_cell_text(self, cell_info):

@@ -25,11 +25,14 @@ class SchemaSerializer(TableSerializer):
             cell_text = cell_info['text']
             cell_serial_text = cell_text + ' | '
             cell_serial_size = cell_info['size'] + 1
+    
+            cell_info['serial_text'] = cell_serial_text
+            cell_info['serial_size'] = cell_serial_size
             
             serial_text += cell_serial_text
             serial_size += cell_serial_size
 
-        serial_text = serial_text.rstrip()[:-1] + self.tokenizer.sep_token
+        serial_text = serial_text.rstrip()[:-1] + self.tokenizer.sep_token + ' '
         return serial_text, serial_size
  
     def get_schema_column_text(self, col_name):
@@ -80,7 +83,7 @@ class SchemaSerializer(TableSerializer):
             yield from self.serialize_schema_block(table_data, schema_block) 
   
     def get_window_schema_text(self, table_data, schema_block):
-        schema_text = table_data['documentTitle'] + ' ' + self.tokenizer.sep_token + schema_block['text']
+        schema_text = table_data['documentTitle'] + ' ' + self.tokenizer.sep_token + ' ' + schema_block['text']
         return schema_text
 
     def preprocess_schema_block(self, table_data, schema_block):

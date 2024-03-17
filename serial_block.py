@@ -31,12 +31,14 @@ class BlockSerializer(TableSerializer):
         for row in range(row_cnt):
             for col in range(col_cnt):
                 serial_text, serial_size = self.get_serial_text(table_data, row, col)
-                if self.serial_window.can_add(table_data, row, col, serial_text, serial_size):
-                    self.serial_window.add(table_data, row, col)
+                col_group_lst = [[col]]
+                fit_ok, serial_info = self.serial_window.can_add(table_data, row, col_group_lst, serial_text, serial_size)
+                if fit_ok:
+                    self.serial_window.add(table_data, serial_info)
                 else:
                     serial_block = self.serial_window.pop(table_data)
                     yield serial_block
-                    self.serial_window.add(table_data, row, col)
+                    self.serial_window.add(table_data, serial_info)
         
         if self.serial_window.can_pop():
             serial_block = self.serial_window.pop(table_data)
