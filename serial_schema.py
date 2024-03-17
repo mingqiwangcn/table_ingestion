@@ -1,6 +1,8 @@
 import util
 from context_window import ContextWindow
+from bin_packing import bin_pack
 from serial import TableSerializer
+
 
 class SchemaSerializer(TableSerializer):
     def __init__(self):
@@ -10,54 +12,54 @@ class SchemaSerializer(TableSerializer):
     def set_numeric_serializer(self, numeric_serializer):
         self.numeric_serializer = numeric_serializer
 
-    def get_serial_text(self, table_data, row, col, block_cols):
+    def get_serial_text(self, table_data, row, block_cols):
         col_data = table_data['columns']
-        col_info = col_data[col]
-        is_last_cell = (col == block_cols[-1])
-        sep_token = ';' if not is_last_cell else self.tokenizer.sep_token
-        if col_info.get('ignore_row_serial', False):
-            return '', 0
-       
-        cell_info = table_data['rows'][row]['cells'][col]
-        cell_text = cell_info['text']
-        serial_text = cell_text + ' : ' + sep_token + ' '
-        serial_size = cell_info['size'] + 1 + 1
+        row_cells = table_data['rows'][row]['cells']
+
+        serial_text = ''
+        serial_size = 0
+        for col in block_cols:
+            #if col_info.get('ignore_row_serial', False):
+            #    return '', 0
+            cell_info = row_cells[col] 
+            cell_text = cell_info['text']
+            cell_serial_text = cell_text + ' | '
+            cell_serial_size = cell_info['size'] + 1
+            
+            serial_text += cell_serial_text
+            serial_size += cell_serial_size
+
+        serial_text = serial_text.rstrip()[:-1] + self.tokenizer.sep_token
         return serial_text, serial_size
  
     def get_schema_column_text(self, col_name):
-        serial_text = col_name + ' ;'  
+        serial_text = col_name + ' | '  
         return serial_text
 
     def split_columns(self, table_data):
         col_data = table_data['columns']
         block_lst = []
-        block_cols = []
-        block_text = ''
-        block_size = 0
-        max_size = int(self.serial_window.wnd_size * util.Max_Header_Meta_Ratio)
-        for offset, col_info in enumerate(col_data):
+        Schema_Max_Size = int(self.serial_window.wnd_size * util.Max_Header_Meta_Ratio)
+        
+        schema_item_lst = []
+        for col, col_info in enumerate(col_data):
             col_name = col_info['text'] 
             serial_text = self.get_schema_column_text(col_name) 
             serial_size = util.get_token_size(self.tokenizer, serial_text)
-            if block_size + serial_size <= max_size:
-                block_cols.append(offset)
-                block_text += ' ' + serial_text
-                block_size += serial_size
-            else:
-                block_info = self.get_block_info(block_cols, block_text, block_size)
-                block_lst.append(block_info)
-                block_cols = [offset]
-                block_text = serial_text
-                block_size = serial_size
-
-        if block_size > 0:
+            schema_item = [col, serial_size, serial_text]
+            schema_item_lst.append(schema_item)
+        bin_lst = bin_pack(schema_item_lst, Schema_Max_Size) 
+        
+        for bin_entry in bin_lst:
+            block_cols = [a[0] for a in bin_entry.item_lst]
+            block_text = ''.join([a[2] for a in bin_entry.item_lst])
+            block_size = sum([a[1] for a in bin_entry.item_lst])
             block_info = self.get_block_info(block_cols, block_text, block_size)
             block_lst.append(block_info)
         return block_lst
     
     def get_block_info(self, block_cols, block_text, block_size):
-        assert block_text[-1] == ';'
-        updated_block_text = block_text[:-1] + self.tokenizer.sep_token
+        updated_block_text = block_text.rstrip()[:-1] + self.tokenizer.sep_token
         block_info = {
             'cols':block_cols,
             'text':updated_block_text,
@@ -98,14 +100,15 @@ class SchemaSerializer(TableSerializer):
     def get_wnd_block(self, table_data, schema_block):
         block_cols = schema_block['cols']
         for row in self.get_serial_rows(table_data, schema_block): 
-            for col in block_cols:
-                serial_text, serial_size = self.get_serial_text(table_data, row, col, block_cols)
-                if self.serial_window.can_add(table_data, row, col, serial_text, serial_size):
-                    self.serial_window.add(table_data, row, col)
-                else:
-                    serial_block = self.serial_window.pop(table_data)
-                    yield serial_block
-                    self.serial_window.add(table_data, row, col)
+            serial_text, serial_size = self.get_serial_text(table_data, row, block_cols)
+            col_group_lst = [[col]for col in block_cols]
+            fit_ok, serial_info = self.serial_window.can_add(table_data, row, col_group_lst, serial_text, serial_size)
+            if fit_ok:
+                self.serial_window.add(table_data, serial_info)
+            else:
+                serial_block = self.serial_window.pop(table_data)
+                yield serial_block
+                self.serial_window.add(table_data, serial_info)
         
         if self.serial_window.can_pop():
             serial_block = self.serial_window.pop(table_data)
