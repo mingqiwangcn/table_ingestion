@@ -56,19 +56,19 @@ class AgreeCodingSerializer(TableSerializer):
         yield from self.get_wnd_block(table_data, schema_block, agr_dict)
   
     def get_window_schema_text(self, table_data, schema_block):
-        schema_text = table_data['documentTitle'] + ' ' + self.tokenizer.sep_token + ' ' + schema_block['text']
+        schema_text = table_data['documentTitle'] + ' ' + self.tokenizer.sep_token + ' ' + schema_block['text'] + ' '
         return schema_text
 
     def get_serial_text(self, table_data, row, col_group_lst, agr_group_offset):
         col_data = table_data['columns']
         row_cells = table_data['rows'][row]['cells']
-      
-        serial_text = ''
-        serial_size = 0
+     
+        row_serial_cell_lst = []
         for offset, col_group in enumerate(col_group_lst):
-            first_col = col_group[0]
-            cell_info = row_cells[first_col]
             if offset == agr_group_offset:
+                first_col = col_group[0]
+                cell_info = row_cells[first_col]
+                row_serial_cell_lst.append(cell_info)
                 text_key = 'group_text'
                 size_key = 'group_size'
                 cell_info[text_key] = ' & '.join([row_cells[col]['text'] for col in col_group])
@@ -81,25 +81,23 @@ class AgreeCodingSerializer(TableSerializer):
                 cell_serial_size = cell_size + 1 
                 cell_info['serial_text'] = cell_serial_text
                 cell_info['serial_size'] = cell_serial_size
-                serial_text += cell_serial_text
-                serial_size += cell_serial_size
-                self.update_related_cell(cell_info, cell_serial_text, cell_serial_size)
+                self.update_related_cell(cell_info)
             else:
                 text_key = 'text'
                 size_key = 'size'
                 for col in col_group:
                     cell_info = row_cells[col]
+                    row_serial_cell_lst.append(cell_info)
                     cell_text, cell_size = self.get_cell_text(cell_info, text_key, size_key)
                     cell_serial_text = cell_text + ' | '
                     cell_serial_size = cell_size + 1 
                     cell_info['serial_text'] = cell_serial_text
                     cell_info['serial_size'] = cell_serial_size
-                    serial_text += cell_serial_text
-                    serial_size += cell_serial_size
-                    self.update_related_cell(cell_info, cell_serial_text, cell_serial_size)
-        
-        serial_text = serial_text.rstrip()[:-1] + self.tokenizer.sep_token + ' ' 
-        return serial_text, serial_size
+                    self.update_related_cell(cell_info)
+       
+        boundary_cell = row_serial_cell_lst[-1]
+        boundary_cell['serial_text'] = boundary_cell['serial_text'].rstrip()[:-1] + ' ' + self.tokenizer.sep_token + ' '
+        return row_serial_cell_lst
 
     def get_cell_text(self, cell_info, text_key, size_key):
         text = cell_info[text_key]
@@ -109,9 +107,11 @@ class AgreeCodingSerializer(TableSerializer):
         code, code_size = self.serial_window.cell_code_book.get_code(cell_info, text_key=text_key, size_key=size_key)
         return code, code_size
 
-    def update_related_cell(self, cell_info, serial_text, serial_size):
+    def update_related_cell(self, cell_info):
         compress_code = cell_info.get('compress_code', None)
         if compress_code is not None:
+            serial_text = cell_info['serial_text']
+            serial_size = cell_info['serial_size']
             pre_cell_lst = cell_info['pre_cells']
             for pre_cell in pre_cell_lst:
                 pre_cell['updated_serial_text'] = serial_text
@@ -144,15 +144,21 @@ class AgreeCodingSerializer(TableSerializer):
             serial_block = self.serial_window.pop(table_data)
             yield serial_block
 
+    def try_serialize_row(self, table_data, row, col_group_lst, agr_group_offset):
+        row_serial_cell_lst = self.get_serial_text(table_data, row, col_group_lst, agr_group_offset)
+        status = self.serial_window.can_add(table_data, row, col_group_lst, row_serial_cell_lst)
+        return status
+
     def serialize_on_row(self, table_data, row_lst, col_group_lst, agr_group_offset):
         for row in row_lst:
-            serial_text, serial_size = self.get_serial_text(table_data, row, col_group_lst, agr_group_offset)
-            fit_ok, serial_info = self.serial_window.can_add(table_data, row, col_group_lst, serial_text, serial_size)
+            fit_ok, serial_info = self.try_serialize_row(table_data, row, col_group_lst, agr_group_offset)
             if fit_ok: 
                 self.serial_window.add(table_data, serial_info)
             else:
                 serial_block = self.serial_window.pop(table_data)
                 yield serial_block
+                fit_ok, serial_info = self.try_serialize_row(table_data, row, col_group_lst, agr_group_offset)
+                assert(fit_ok)
                 self.serial_window.add(table_data, serial_info)
 
 

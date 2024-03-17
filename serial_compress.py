@@ -30,9 +30,8 @@ class CompressSerializer(SchemaSerializer):
     def get_serial_text(self, table_data, row, block_cols):
         col_data = table_data['columns']
         row_cells = table_data['rows'][row]['cells']
-        
-        serial_text = ''
-        serial_size = 0
+       
+        row_serial_cell_lst = []
         for col in block_cols:
             cell_info = row_cells[col] 
             cell_text, cell_size = self.get_cell_text(cell_info)
@@ -40,12 +39,12 @@ class CompressSerializer(SchemaSerializer):
             cell_serial_size = cell_size + 1 
             cell_info['serial_text'] = cell_serial_text
             cell_info['serial_size'] = cell_serial_size
-            serial_text += cell_serial_text
-            serial_size += cell_serial_size
-            self.update_related_cell(cell_info, serial_text, serial_size)
-        
-        serial_text = serial_text.rstrip()[:-1] + self.tokenizer.sep_token + ' '
-        return serial_text, serial_size
+            row_serial_cell_lst.append(cell_info)
+            self.update_related_cell(cell_info, row)
+       
+        boundary_cell = row_serial_cell_lst[-1]
+        boundary_cell['serial_text'] = boundary_cell['serial_text'].rstrip()[:-1] + ' ' + self.tokenizer.sep_token + ' '
+        return row_serial_cell_lst
 
     def get_cell_text(self, cell_info):
         text = cell_info['text']
@@ -55,9 +54,12 @@ class CompressSerializer(SchemaSerializer):
         code, code_size = self.serial_window.cell_code_book.get_code(cell_info)
         return code, code_size
 
-    def update_related_cell(self, cell_info, serial_text, serial_size):
+    def update_related_cell(self, cell_info, row):
         compress_code = cell_info.get('compress_code', None) 
         if compress_code is not None:
+            #print('compress_code row =', row)
+            serial_text = cell_info['serial_text']
+            serial_size = cell_info['serial_size']
             pre_cell_lst = cell_info['pre_cells']
             for pre_cell in pre_cell_lst:
                 pre_cell['updated_serial_text'] = serial_text

@@ -17,16 +17,13 @@ class ContextWindow:
         self.schema_text = text
         self.schema_size = util.get_token_size(self.tokenizer, self.schema_text)
 
-    def can_add(self, table_data, row, col_group_lst, serial_text, serial_size):
+    def can_add(self, table_data, row, col_group_lst, serial_cell_lst):
         row_cells = table_data['rows'][row]['cells']
         col_data = table_data['columns']
-        
-        serial_info = {}
-        serial_info['text'] = serial_text
-        serial_info['size'] = serial_size
-        serial_info['row'] = row
-        serial_info['cols'] = col_group_lst
        
+        serial_size = sum([a['serial_size'] for a in serial_cell_lst])
+        serial_info = {'row':row, 'cols':col_group_lst, 'size':serial_size, 'cells':serial_cell_lst}  
+
         code_size = 0
         updated_buffer_size = self.buffer_size
         
@@ -52,6 +49,7 @@ class ContextWindow:
                     compress_code = cell_info.get('compress_code', None)
                     if compress_code is not None:
                         del cell_info['compress_code']
+                        del cell_info['cpr_code_size']
                         pre_cell_lst = cell_info['pre_cells']
                         for pre_cell in pre_cell_lst:
                             del pre_cell['updated_serial_text']
@@ -65,6 +63,7 @@ class ContextWindow:
         self.buffer_size += serial_info['size']
         self.text_buffer.append(serial_info)
         row = serial_info['row']
+
         col_group_lst = serial_info['cols']
         row_cells = table_data['rows'][row]['cells']
         for col_group in col_group_lst:
@@ -87,11 +86,21 @@ class ContextWindow:
 
     def pop(self, table_data):
         assert(len(self.text_buffer) > 0)
-        text_lst = [a['text'] for a in self.text_buffer]
+        text_lst = []
+        
+        exist_compress_code = False
+        for serial_info in self.text_buffer:
+            cell_lst = serial_info['cells']
+            cell_text_lst = [a['serial_text'] for a in cell_lst]
+            text_lst.extend(cell_text_lst)
+            for cell_info in cell_lst:
+                if cell_info.get('compress_code', False):
+                    exist_compress_code = True
+
         code_text = ''
         code_size = 0
         special_token_lst = None
-        if self.cell_code_book is not None:
+        if exist_compress_code: 
             code_text = self.cell_code_book.code_text
             code_size = self.cell_code_book.code_size
             special_token_lst = list(self.cell_code_book.special_token_dict.keys())
