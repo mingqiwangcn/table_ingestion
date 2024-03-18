@@ -38,7 +38,7 @@ class ContextWindow:
                         pre_cell_lst = cell_info['pre_cells']
                         for pre_cell in pre_cell_lst:
                             pre_cell_size_chg = pre_cell['updated_serial_size'] - pre_cell['serial_size']                
-                            updated_buffer_size += self.buffer_size + pre_cell_size_chg 
+                            updated_buffer_size += pre_cell_size_chg
 
             code_size = self.cell_code_book.code_size + cpr_code_size 
 
