@@ -20,7 +20,7 @@ class AgreeCodingSerializer(TableSerializer):
         schema_block_lst = self.split_columns(attr_group_dict, table_data)
         self.assign_agr_key_to_schema_block(schema_block_lst, agr_dict)
         for schema_block in schema_block_lst:
-            yield from self.serialize_schema_block(table_data, schema_block, agr_dict)
+            yield from self.serialize_schema_block(table_data, schema_block, agr_dict, attr_group_dict)
   
     def assign_agr_key_to_schema_block(self, schema_block_lst, agr_dict):
         agr_key_to_assign_set = set(agr_dict.keys())
@@ -45,15 +45,15 @@ class AgreeCodingSerializer(TableSerializer):
                 if agr_col_group in schema_col_group_lst:
                     matched_offset = schema_col_group_lst.index(agr_col_group)
                     exact_matched_key_lst.append(key)
-                block_agr_map[key] = {'matched_offset':matched_offset, 'col_group':agr_col_group} 
+                block_agr_map[key] = {'matched_offset':matched_offset} 
             
             for matched_key in exact_matched_key_lst:
                 agr_key_to_assign_set.remove(matched_key)
 
-    def serialize_schema_block(self, table_data, schema_block, agr_dict):
+    def serialize_schema_block(self, table_data, schema_block, agr_dict, attr_group_dict):
         schema_text = self.get_window_schema_text(table_data, schema_block)
         self.serial_window.set_schema_text(schema_text)
-        yield from self.get_wnd_block(table_data, schema_block, agr_dict)
+        yield from self.get_wnd_block(table_data, schema_block, agr_dict, attr_group_dict)
   
     def get_window_schema_text(self, table_data, schema_block):
         schema_text = table_data['documentTitle'] + ' ' + self.tokenizer.sep_token + ' ' + schema_block['text'] + ' '
@@ -117,11 +117,21 @@ class AgreeCodingSerializer(TableSerializer):
                 pre_cell['updated_serial_text'] = serial_text
                 pre_cell['updated_serial_size'] = serial_size
 
-    def get_wnd_block(self, table_data, schema_block, agr_dict):
+    def get_group_keys(self, col_group_lst, attr_group_dict):
+        group_matched_keys = []
+        for col_group in col_group_lst:
+            group_key = tuple(col_group)
+            if group_key in attr_group_dict:
+                group_matched_keys.extend(attr_group_dict[group_key]['agr_keys'])
+        return group_matched_keys
+
+    def get_wnd_block(self, table_data, schema_block, agr_dict, attr_group_dict):
         col_group_lst = schema_block['cols']
         block_agr_map = schema_block['agr_map']
-        serial_agr_key_lst = self.create_agr_priority_queue(agr_dict, list(block_agr_map.keys()))
-        
+
+        group_matched_keys = self.get_group_keys(col_group_lst, attr_group_dict)
+        serial_agr_key_lst = self.create_agr_priority_queue(agr_dict, group_matched_keys, list(block_agr_map.keys()))
+       
         row_serial_done_set = set()
         for _ in range(len(serial_agr_key_lst)):
             _, agr_key = heapq.heappop(serial_agr_key_lst)
@@ -131,7 +141,6 @@ class AgreeCodingSerializer(TableSerializer):
             row_serial_done_set.update(row_set_to_serial)
             agr_map = block_agr_map[agr_key]
             agr_group_offset = agr_map['matched_offset']
-            agr_col_group = agr_map['col_group'] 
             yield from self.serialize_on_row(table_data, row_lst, col_group_lst, agr_group_offset)
 
         row_data = table_data['rows']
@@ -161,12 +170,25 @@ class AgreeCodingSerializer(TableSerializer):
                 assert(fit_ok)
                 self.serial_window.add(table_data, serial_info)
 
+    def get_max_class_size(self, agr_key_lst, agr_dict):
+        max_size = 0
+        for key in agr_key_lst:
+            agr_class_lst = agr_dict[key]['agr_class_lst']
+            class_size = len(agr_class_lst)
+            if class_size > max_size:
+                max_size = class_size
+        return max_size
 
-    def create_agr_priority_queue(self, agr_dict, agr_key_lst):
+    def create_agr_priority_queue(self, agr_dict, group_matched_keys, agr_key_lst):
+        group_matched_key_set = set(group_matched_keys)
+        max_class_size = self.get_max_class_size(agr_key_lst, agr_dict)
         pq_item_lst = []
         for agr_key in agr_key_lst:
             agr_class_lst = agr_dict[agr_key]['agr_class_lst']
             agr_size = len(agr_class_lst)
+            if agr_key in group_matched_key_set:
+                agr_size = max_class_size + 1
+
             pq_item = (-agr_size, agr_key)
             pq_item_lst.append(pq_item)
         heapq.heapify(pq_item_lst)
@@ -212,11 +234,12 @@ class AgreeCodingSerializer(TableSerializer):
             agr_size = sum(size_lst) * num_rows
             attr_tuple = tuple(col_lst)
             if attr_tuple not in attr_group_dict:
-                attr_group_dict[attr_tuple] = {'group':col_lst, 'row_set':set(), 'agr_size':0}
+                attr_group_dict[attr_tuple] = {'group':col_lst, 'agr_keys':[], 'row_set':set(), 'agr_size':0}
 
             attr_group = attr_group_dict[attr_tuple]
             attr_group['agr_size'] += agr_size
             attr_group['row_set'].update(row_set)
+            attr_group['agr_keys'].append(key) 
 
         for group_key in attr_group_dict:
             group_item = attr_group_dict[group_key]
@@ -233,7 +256,7 @@ class AgreeCodingSerializer(TableSerializer):
                 continue
             attr_set = (set(group), attr_group['agr_size'])
             attr_set_lst.append(attr_set)
-
+        
         max_disjoint_sets = util.set_packing(attr_set_lst)
         return max_disjoint_sets
 
@@ -257,7 +280,7 @@ class AgreeCodingSerializer(TableSerializer):
         block_lst = []
         col_group_lst = [] 
         block_col_set = set()
-       
+      
         max_disjoint_attr_sets = self.compute_max_disjoint_attr_sets(attr_group_dict)
         col_max_set_dict = self.col_to_max_attr_set(max_disjoint_attr_sets)
       
@@ -327,6 +350,19 @@ class AgreeCodingSerializer(TableSerializer):
                         key_msg = key_2 + '   ' + key_1
                     print(key_msg)
 
+    def sort_class(self, row_class_lst):
+        item_lst = []
+        for row_class in row_class_lst:
+            parts = row_class.split('-') 
+            col = int(parts[0])
+            class_id = int(parts[1])
+            item = (col, class_id, row_class)
+            item_lst.append(item)
+
+        sorted_item_lst = sorted(item_lst, key=lambda x: (x[0], x[1]))
+        sorted_row_class_lst = [a[2] for a in sorted_item_lst]
+        return sorted_row_class_lst
+
     def compute_agree_set(self, table_data):
         self.create_stripped_partitions(table_data)
         self.compute_row_eq_class(table_data)        
@@ -339,8 +375,7 @@ class AgreeCodingSerializer(TableSerializer):
             union_row_class_set = set()
             for row in class_row_lst:
                 union_row_class_set.update(row_data[row]['row_class_set'])
-            union_row_class_lst = list(union_row_class_set)
-            union_row_class_lst.sort()
+            union_row_class_lst = self.sort_class(list(union_row_class_set))
 
             class_mask_lst = []
             for row in class_row_lst:
