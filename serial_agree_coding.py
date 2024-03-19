@@ -389,28 +389,29 @@ class AgreeCodingSerializer(TableSerializer):
         return agr_dict
 
     def agr_mask_to_set(self, agr_dict, agr_mask, class_row_lst, union_row_class_lst):
-        tuple_dict = {}
-        num_tuple = agr_mask.shape[0]
-        for i in range(num_tuple-1):
-            for j in range(i+1, num_tuple):
-                mask_array = agr_mask[i][j].numpy()
-                tuple_key = tuple(mask_array)
-                if tuple_key not in tuple_dict:
-                    tuple_dict[tuple_key] = {'row_set':set()}
-                row_set = tuple_dict[tuple_key]['row_set']
-                row_set.add(class_row_lst[i])
-                row_set.add(class_row_lst[j])
-       
-        for tuple_key in tuple_dict:
-            tuple_row_set = tuple_dict[tuple_key]['row_set']
-            tuple_mask = list(tuple_key)
-            agr_class_lst = [union_row_class_lst[offset] for offset, a in enumerate(tuple_mask) if a == 1] 
+        nonzero_indexes = agr_mask.nonzero().numpy()
+        pair_dict = {}
+        for entry in nonzero_indexes:
+            i, j, k = entry.tolist()
+            if j <= i:
+                continue
+            pair_key = f'{i},{j}'
+            if pair_key not in pair_dict:
+                pair_dict[pair_key] = {'nonzero_offsets':[], 'rows':[i, j]}
+            nonzero_offsets = pair_dict[pair_key]['nonzero_offsets']
+            nonzero_offsets.append(k)
+        
+        for pair_key in pair_dict:
+            pair_info = pair_dict[pair_key]
+            row_set = set(pair_info['rows'])
+            offset_lst = pair_info['nonzero_offsets']
+            agr_class_lst = [union_row_class_lst[offset] for offset in offset_lst] 
             agr_key = ','.join(agr_class_lst)
             if agr_key not in agr_dict:
-                agr_dict[agr_key] = {'agr_class_lst':agr_class_lst, 'row_set':tuple_row_set}
+                agr_dict[agr_key] = {'agr_class_lst':agr_class_lst, 'row_set':row_set}
             else:    
                 agr_row_set = agr_dict[agr_key]['row_set']
-                agr_row_set.update(tuple_row_set)
+                agr_row_set.update(row_set)
 
     def get_table_eq_classes(self, table_data):
         table_eq_class_dict = {}  
