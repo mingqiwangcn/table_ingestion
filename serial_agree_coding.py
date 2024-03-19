@@ -73,7 +73,6 @@ class AgreeCodingSerializer(TableSerializer):
                 size_key = 'group_size'
                 cell_info[text_key] = ' & '.join([row_cells[col]['text'] for col in col_group])
                 cell_info[size_key] = sum([row_cells[col]['size'] for col in col_group]) + len(col_group) - 1   
-                cell_info['group_size'] = len(col_group)
 
                 cell_text, cell_size = self.get_cell_text(cell_info, text_key, size_key)
             
