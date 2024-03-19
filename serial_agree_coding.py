@@ -395,9 +395,11 @@ class AgreeCodingSerializer(TableSerializer):
             i, j, k = entry.tolist()
             if j <= i:
                 continue
-            pair_key = f'{i},{j}'
+            row_i = class_row_lst[i]
+            row_j = class_row_lst[j]
+            pair_key = f'{row_i},{row_j}'
             if pair_key not in pair_dict:
-                pair_dict[pair_key] = {'nonzero_offsets':[], 'rows':[i, j]}
+                pair_dict[pair_key] = {'nonzero_offsets':[], 'rows':[row_i, row_j]}
             nonzero_offsets = pair_dict[pair_key]['nonzero_offsets']
             nonzero_offsets.append(k)
         

@@ -16,7 +16,7 @@ class TableSerializer:
 
     def serialize(self, table_data):
         util.preprocess_schema(self.tokenizer, table_data)
-        return self.do_serialize(table_data)
+        yield from self.do_serialize(table_data)
 
     def do_serialize(self, table_data):
         return
