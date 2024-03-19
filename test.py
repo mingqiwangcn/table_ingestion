@@ -13,13 +13,6 @@ import argparse
 import copy
 import glob
 
-def iterate_table(args):
-    data_file = get_table_file(args) 
-    with open(data_file) as f:
-        for line in f:
-            table_data = json.loads(line)
-            yield table_data
-
 def get_table_files(args):
     file_pattern = '../data/%s/tables/*.jsonl' % args.dataset
     file_lst = glob.glob(file_pattern)
