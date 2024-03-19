@@ -67,19 +67,19 @@ class ContextWindow:
         col_group_lst = serial_info['cols']
         row_cells = table_data['rows'][row]['cells']
         for col_group in col_group_lst:
-            first_col = col_group[0]
-            cell_info = row_cells[first_col]
-            compress_code = cell_info.get('compress_code', None)
-            if compress_code is not None:
-                pre_cell_lst = cell_info['pre_cells']
-                for pre_cell in pre_cell_lst:
-                    pre_cell_size_chg = pre_cell['updated_serial_size'] - pre_cell['serial_size']                
-                    self.buffer_size += pre_cell_size_chg
-                    pre_cell['serial_text'] = pre_cell['updated_serial_text']
-                    pre_cell['serial_size'] = pre_cell['updated_serial_size']
-                
-                self.cell_code_book.code_text += compress_code
-                self.cell_code_book.code_size += cell_info['cpr_code_size']
+            for col in col_group:
+                cell_info = row_cells[col]
+                compress_code = cell_info.get('compress_code', None)
+                if compress_code is not None:
+                    pre_cell_lst = cell_info['pre_cells']
+                    for pre_cell in pre_cell_lst:
+                        pre_cell_size_chg = pre_cell['updated_serial_size'] - pre_cell['serial_size'] 
+                        self.buffer_size += pre_cell_size_chg
+                        pre_cell['serial_text'] = pre_cell['updated_serial_text']
+                        pre_cell['serial_size'] = pre_cell['updated_serial_size']
+                    
+                    self.cell_code_book.code_text += compress_code
+                    self.cell_code_book.code_size += cell_info['cpr_code_size']
 
     def can_pop(self):
         return len(self.text_buffer) > 0
