@@ -392,7 +392,7 @@ class AgreeCodingSerializer(TableSerializer):
         maximal_class_lst = self.compute_maximal_eq_class(table_data)
         row_data = table_data['rows']
         agr_dict = {}
-        for maximal_class in tqdm(maximal_class_lst):
+        for maximal_class in maximal_class_lst:
             class_row_lst = list(maximal_class['row_set'])
             num_class_row = len(class_row_lst)
             union_row_class_set = set()
