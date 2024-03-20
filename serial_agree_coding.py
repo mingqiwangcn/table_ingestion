@@ -276,32 +276,17 @@ class AgreeCodingSerializer(TableSerializer):
     # Try to put agree groups in the same schema group
     def split_columns(self, attr_group_dict, table_data):
         col_data = table_data['columns']
-        block_lst = []
-        col_group_lst = [] 
-        block_col_set = set()
-      
         max_disjoint_attr_sets = self.compute_max_disjoint_attr_sets(attr_group_dict)
         col_max_set_dict = self.col_to_max_attr_set(max_disjoint_attr_sets)
-      
-        group_item_lst = []
         Schema_Max_Size = int(self.serial_window.wnd_size * util.Max_Header_Meta_Ratio)
-        for col, _ in enumerate(col_data):
-            if col in block_col_set:
-                continue # col may be already included by attr set
-            col_group = []
-            if col in col_max_set_dict:
-                attr_set = col_max_set_dict[col]
-                col_group = list(attr_set)
-                col_group.sort()
-            else:
-                col_group = [col]
-            
-            block_col_set.update(set(col_group))
+        group_item_lst = []
+        fit_group_lst = self.get_fit_col_groups(col_data, col_max_set_dict, Schema_Max_Size)
+        for col_group in fit_group_lst:
             serial_text, serial_size = self.get_column_serial(col_data, col_group)
-            
             group_item = [col_group, serial_size, serial_text]
             group_item_lst.append(group_item)
         
+        block_lst = []
         bin_lst = bin_pack(group_item_lst, Schema_Max_Size)
         for bin_entry in bin_lst:
             col_group_lst = [a[0] for a in bin_entry.item_lst]
@@ -310,6 +295,45 @@ class AgreeCodingSerializer(TableSerializer):
             block_info = self.get_block_info(col_group_lst, block_text, block_size)
             block_lst.append(block_info)
         return block_lst 
+
+    def get_fit_col_groups(self, col_data, col_max_set_dict, max_size):
+        fit_group_lst = []
+        block_col_set = set()
+        for col, _ in enumerate(col_data):
+            if col in block_col_set:
+                continue # col may be already included by attr set
+            col_group = None
+            if col in col_max_set_dict:
+                attr_set = col_max_set_dict[col]
+                col_group = list(attr_set)
+                col_group.sort()
+                sub_group_lst = self.split_col_group(col_data, col_group, max_size)
+                fit_group_lst.extend(sub_group_lst)
+            else:
+                col_group = [col]
+                fit_group_lst.append(col_group)
+            block_col_set.update(set(col_group))
+        return fit_group_lst
+
+    def split_col_group(self, col_data, col_group, max_size):
+        group_size = sum([col_data[col]['size'] + 1 for col in col_group])
+        if group_size < max_size:
+            return [col_group]
+        sub_group_lst = []
+        sub_group = []
+        sub_group_size = 0
+        for col in col_group:
+            serial_size = col_data[col]['size'] + 1
+            if sub_group_size + serial_size > max_size:
+                assert len(sub_group) > 0
+                sub_group_lst.append(sub_group)
+                sub_group = []
+                sub_group_size = 0
+            sub_group.append(col)
+            sub_group_size += serial_size
+        if len(sub_group) > 0:
+            sub_group_lst.append(sub_group)
+        return sub_group_lst
 
     def get_block_info(self, col_group_lst, block_text, block_size):
         updated_block_text = block_text.rstrip()[:-1] + self.tokenizer.sep_token

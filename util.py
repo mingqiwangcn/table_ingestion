@@ -5,9 +5,8 @@ import math
 Max_Title_Size = 60
 Max_Col_Header_Size = 30
 Max_Cell_Size = 100
-Max_Header_Meta_Ratio = 0.25 # {sum of header meta tokens} / {window size}
-MAX_WND_COLS = 20
-Max_Seq_Length = 461
+Max_Header_Meta_Ratio = 0.2 # {sum of header meta tokens} / {window size}
+Max_Seq_Length = 511 # 461
 
 class CellDataType:
     INT = 1
@@ -19,10 +18,10 @@ class CellDataType:
 def get_context_window_size(tokenizer):
     prefix = "title: context: " # the prefix is used by the encoder. There are 4 tokens 'title', ':', 'context', ':'
     tokens = tokenizer.tokenize(prefix)
-    question_max_size = 50
+    question_max_size = 0 # 50 , Not consider it right now
     sep_token_size = 3 # used for question answering [CLS] [SEP] [SEP] 
-    wnd_size = 512 - len(tokens) - question_max_size - sep_token_size # = 512 - 4 - 50 - 3 = 455 for user text 
-    #for the encoder, max_seq_length (incuding prefix, user text, [cls] and [SEP]) = 455 + 4 + 2 = 461 
+    wnd_size = 512 - len(tokens) - question_max_size - sep_token_size # = 512 - 4 - 0 - 3 = 505 for user text 
+    #for the encoder, max_seq_length (incuding prefix, user text, [cls] and [SEP]) = 505 + 4 + 2 = 511 
     return wnd_size 
 
 def wrap_text(text, size):
