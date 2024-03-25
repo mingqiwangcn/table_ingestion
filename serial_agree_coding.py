@@ -214,7 +214,7 @@ class AgreeCodingSerializer(TableSerializer):
             col_group_lst.append(col_group)
         return col_group_lst
   
-    def sample_agree_sets(self, table_data, agr_set_pct=0.3):
+    def sample_agr_set(self, table_data, agr_set_pct=0.3):
         row_data = self.get_row_data(table_data)
         num_agree_rows = 100
         num_rows_to_sample = int(num_agree_rows / agr_set_pct)
@@ -231,6 +231,8 @@ class AgreeCodingSerializer(TableSerializer):
         for i in range(N_R - 1):
             for j in range(i+1, N_R):
                 agr_cols = data_mask[i][j].nonzero().view(-1).numpy().tolist()
+                if len(agr_cols) < 2:
+                    continue
                 agr_key = tuple(agr_cols)
                 if agr_key not in agr_dict:
                     agr_dict[agr_key] = {'row_set':set()}
@@ -238,51 +240,28 @@ class AgreeCodingSerializer(TableSerializer):
                 pair_row = [sample_row_lst[i], sample_row_lst[j]]
                 agr_row_set.update(set(pair_row))
 
-    def compute_agr_attrs(self, agr_dict, table_data):
+        self.compute_agr_weight(agr_dict, table_data)
+        max_disjoint_sets = self.compute_max_disjoint_agr_set(agr_dict)
+        agr_set_lst = [a[2] for a in max_disjoint_sets]
+        return agr_set_lst
+
+    def compute_agr_weight(self, agr_dict, table_data):
         attr_group_dict = {}
-        row_data = table_data['rows']
+        row_data = self.get_row_data(table_data)
         for key in agr_dict:
+            col_group = list(key)
             agr_item = agr_dict[key]
-            agr_class_lst = agr_item['agr_class_lst']
             row_set = agr_item['row_set']
-            num_rows = len(row_set)
-            rep_row = next(iter(row_set)) 
-            size_lst = []
-            col_lst = []
-            for agr_class in agr_class_lst:
-                col = int(agr_class.split('-')[0])
-                col_lst.append(col)
-                size = row_data[rep_row]['cells'][col]['size']
-                size_lst.append(size)
+            agr_item['weight'] = len(col_group) * len(row_set)
 
-            agr_size = sum(size_lst) * num_rows
-            attr_tuple = tuple(col_lst)
-            if attr_tuple not in attr_group_dict:
-                attr_group_dict[attr_tuple] = {'group':col_lst, 'agr_keys':[], 'row_set':set(), 'agr_size':0}
-
-            attr_group = attr_group_dict[attr_tuple]
-            attr_group['agr_size'] += agr_size
-            attr_group['row_set'].update(row_set)
-            attr_group['agr_keys'].append(key) 
-
-        for group_key in attr_group_dict:
-            group_item = attr_group_dict[group_key]
-            group_item['row_percent'] = len(group_item['row_set']) / len(row_data)
-            del group_item['row_set']
-        return attr_group_dict
-
-    def compute_max_disjoint_attr_sets(self, attr_group_dict):
-        attr_set_lst = []  
-        for key in attr_group_dict:
-            attr_group = attr_group_dict[key]
-            group = attr_group['group']
-            if len(group) < 2:
-                continue
-            attr_set = (set(group), attr_group['agr_size'])
-            attr_set_lst.append(attr_set)
-        
-        max_disjoint_sets = util.set_packing(attr_set_lst)
-        return max_disjoint_sets
+    def compute_max_disjoint_agr_set(self, agr_dict):
+        col_set_lst = []  
+        for key in agr_dict:
+            group = list(key)
+            agr_item = agr_dict[key]
+            col_set = (set(group), agr_item['weight'], key)
+            col_set_lst.append(col_set)
+        max_disjoint_sets = util.set_packing(col_set_lst)
 
     def col_to_max_attr_set(self, attr_set_lst):
         col_set_dict = {}
@@ -413,7 +392,11 @@ class AgreeCodingSerializer(TableSerializer):
 
     def compute_agree_set(self, table_data):
         self.create_partitions(table_data)
-        self.sample_agree_sets(table_data)
+        agr_set_lst = self.sample_agr_set(table_data)
+
+    def index_by_agr_set(self, table_data, agr_set_lst):
+        row_data  = self.get_row_data(table_data)
+        
 
     def get_col_data(self, table_data):
         return table_data['columns']
