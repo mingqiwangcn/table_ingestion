@@ -214,6 +214,30 @@ class AgreeCodingSerializer(TableSerializer):
             col_group_lst.append(col_group)
         return col_group_lst
   
+    def sample_agree_sets(self, table_data, agr_set_pct=0.3):
+        row_data = self.get_row_data(table_data)
+        num_agree_rows = 100
+        num_rows_to_sample = int(num_agree_rows / agr_set_pct)
+        M = min(num_rows_to_sample, len(row_data))
+        sample_row_lst = random.sample(range(0, len(row_data)), M)
+        row_item_lst = [row_data[a] for a in sample_row_lst]
+        class_id_lst = [[a['class_id'] for a in row_item['cells']] for row_item in row_item_lst]
+        data_class = torch.tensor(class_id_lst, dtype=torch.int)
+        N_R,  N_C = data_class.shape 
+        data_class_1 = data_class.view(N_R, -1, N_C).expand(-1, N_R, -1)
+        data_class_2 = data_class.view(-1, N_R, N_C).expand(N_R, -1, -1)
+        data_mask = (data_class_1 == data_class_2)
+        agr_dict = {}
+        for i in range(N_R - 1):
+            for j in range(i+1, N_R):
+                agr_cols = data_mask[i][j].nonzero().view(-1).numpy().tolist()
+                agr_key = tuple(agr_cols)
+                if agr_key not in agr_dict:
+                    agr_dict[agr_key] = {'row_set':set()}
+                agr_row_set = agr_dict[agr_key]['row_set']
+                pair_row = [sample_row_lst[i], sample_row_lst[j]]
+                agr_row_set.update(set(pair_row))
+
     def compute_agr_attrs(self, agr_dict, table_data):
         attr_group_dict = {}
         row_data = table_data['rows']
@@ -396,32 +420,6 @@ class AgreeCodingSerializer(TableSerializer):
 
     def get_row_data(self, table_data):
         return table_data['rows']
-
-    def sample_agree_sets(self, table_data, agr_set_pct=0.3):
-        row_data = self.get_row_data(table_data)
-        num_agree_rows = 100
-        num_rows_to_sample = int(num_agree_rows / agr_set_pct)
-        M = min(num_rows_to_sample, len(row_data))
-        sample_row_lst = random.sample(row_data, M)
-        class_id_lst = [[a['class_id'] for a in row_item['cells']] for row_item in sample_row_lst]
-        data_class = torch.tensor(class_id_lst, dtype=torch.int)
-        N_R,  N_C = data_class.shape 
-        data_class_1 = data_class.view(N_R, -1, N_C).expand(-1, N_R, -1)
-        data_class_2 = data_class.view(-1, N_R, N_C).expand(N_R, -1, -1)
-        data_mask = (data_class_1 == data_class_2)
-        nonzero_indexes = data_mask.nonzero().numpy()
-        pair_dict = {}
-        for entry in nonzero_indexes:
-            i, j, k = entry.tolist()
-            if j <= i:
-                continue
-            pair_key = f'{i},{j}'
-            if pair_key not in pair_dict:
-                pair_dict[pair_key] = {'agr_cols':[]}
-            agr_cols = pair_dict[pair_key]['agr_cols']
-            agr_cols.append(k)
-       
-
 
     def compute_agree_set_2(self, table_data):
         self.create_stripped_partitions(table_data)
