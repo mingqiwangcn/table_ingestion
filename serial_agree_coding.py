@@ -194,13 +194,6 @@ class AgreeCodingSerializer(TableSerializer):
         heapq.heapify(pq_item_lst)
         return pq_item_lst
 
-    def agr_class_to_col_group(self, agr_class_lst):
-        col_group = []
-        for agr_class in agr_class_lst:
-            col = int(agr_class.split('-')[0])
-            col_group.append(col)
-        return col_group
-
     def get_col_groups(self, agr_col_group, table_data):
         agr_col_set = set(agr_col_group)
         col_data = table_data['columns']
@@ -262,6 +255,7 @@ class AgreeCodingSerializer(TableSerializer):
             col_set = (set(group), agr_item['weight'], key)
             col_set_lst.append(col_set)
         max_disjoint_sets = util.set_packing(col_set_lst)
+        return max_disjoint_sets
 
     def col_to_max_attr_set(self, attr_set_lst):
         col_set_dict = {}
@@ -348,167 +342,32 @@ class AgreeCodingSerializer(TableSerializer):
         }
         return block_info
 
-    def check_agr_key(self, agr_dict):
-        key_lst = list(agr_dict.keys())
-
-        N = len(key_lst)
-        pair_dict = {}
-        for i in range(N):
-            key_1 = key_lst[i]
-            agr_class_1 = set(agr_dict[key_1]['agr_class_lst']) 
-            set_1 = agr_dict[key_1]['row_set']
-            for j in range(N):
-                if i == j:
-                    continue
-
-                pair = (i, j) if i < j else (j, i)
-                if pair in pair_dict:
-                    continue
-                
-                pair_dict[pair] = True
-                key_2 = key_lst[j]
-                agr_class_2 = set(agr_dict[key_2]['agr_class_lst']) 
-                set_2 = agr_dict[key_2]['row_set']
-                
-                if len(set_1.intersection(set_2)) > 1:
-                    if agr_class_1.issubset(agr_class_2):
-                        key_msg = key_1 + '   ' + key_2
-                    else:
-                        key_msg = key_2 + '   ' + key_1
-                    print(key_msg)
-
-    def sort_class(self, row_class_lst):
-        item_lst = []
-        for row_class in row_class_lst:
-            parts = row_class.split('-') 
-            col = int(parts[0])
-            class_id = int(parts[1])
-            item = (col, class_id, row_class)
-            item_lst.append(item)
-
-        sorted_item_lst = sorted(item_lst, key=lambda x: (x[0], x[1]))
-        sorted_row_class_lst = [a[2] for a in sorted_item_lst]
-        return sorted_row_class_lst
-
     def compute_agree_set(self, table_data):
         self.create_partitions(table_data)
-        agr_set_lst = self.sample_agr_set(table_data)
+        for sample_number in range(3):
+            agr_set_lst = self.sample_agr_set(table_data)
+            self.index_by_agr_set(table_data, agr_set_lst, sample_number)
 
-    def index_by_agr_set(self, table_data, agr_set_lst):
+    def index_by_agr_set(self, table_data, agr_set_lst, sample_number):
         row_data  = self.get_row_data(table_data)
-        
-
+        for col_group in agr_set_lst:
+            agr_dict = {}
+            for row, row_item in enumerate(row_data):
+                row_cells = row_item['cells']
+                agr_class_lst = [row_cells[col]['class_id'] for col in col_group]
+                agr_key = tuple(agr_class_lst)
+                if agr_key not in agr_dict:
+                    agr_dict[agr_key] = {'rows':[]}
+                agr_rows = agr_dict[agr_key]['rows']
+                agr_rows.append(row)
+            print('sample ', sample_number, 'col groups', len(col_group), 
+                  'total rows =', len(row_data), 'agr sets', len(agr_dict))
+    
     def get_col_data(self, table_data):
         return table_data['columns']
 
     def get_row_data(self, table_data):
         return table_data['rows']
-
-    def compute_agree_set_2(self, table_data):
-        self.create_stripped_partitions(table_data)
-        self.compute_row_eq_class(table_data)        
-        maximal_class_lst = self.compute_maximal_eq_class(table_data)
-        row_data = table_data['rows']
-        agr_dict = {}
-        for maximal_class in maximal_class_lst:
-            class_row_lst = list(maximal_class['row_set'])
-            num_class_row = len(class_row_lst)
-            union_row_class_set = set()
-            for row in class_row_lst:
-                union_row_class_set.update(row_data[row]['row_class_set'])
-            union_row_class_lst = self.sort_class(list(union_row_class_set))
-
-            class_mask_lst = []
-            for row in class_row_lst:
-                row_class_set = row_data[row]['row_class_set']
-                row_class_mask = [int(a in row_class_set) for a in union_row_class_lst]
-                class_mask_lst.append(row_class_mask)
-            
-            class_set_mask = torch.tensor(class_mask_lst, dtype=torch.uint8) 
-            agr_mask = torch.einsum('ij,jk->ikj', class_set_mask, class_set_mask.t())
-            self.agr_mask_to_set(agr_dict, agr_mask, class_row_lst, union_row_class_lst)
-        return agr_dict
-
-    def agr_mask_to_set(self, agr_dict, agr_mask, class_row_lst, union_row_class_lst):
-        nonzero_indexes = agr_mask.nonzero().numpy()
-        pair_dict = {}
-        for entry in nonzero_indexes:
-            i, j, k = entry.tolist()
-            if j <= i:
-                continue
-            row_i = class_row_lst[i]
-            row_j = class_row_lst[j]
-            pair_key = f'{row_i},{row_j}'
-            if pair_key not in pair_dict:
-                pair_dict[pair_key] = {'nonzero_offsets':[], 'rows':[row_i, row_j]}
-            nonzero_offsets = pair_dict[pair_key]['nonzero_offsets']
-            nonzero_offsets.append(k)
-        
-        for pair_key in pair_dict:
-            pair_info = pair_dict[pair_key]
-            row_set = set(pair_info['rows'])
-            offset_lst = pair_info['nonzero_offsets']
-            agr_class_lst = [union_row_class_lst[offset] for offset in offset_lst] 
-            agr_key = ','.join(agr_class_lst)
-            if agr_key not in agr_dict:
-                agr_dict[agr_key] = {'agr_class_lst':agr_class_lst, 'row_set':row_set}
-            else:    
-                agr_row_set = agr_dict[agr_key]['row_set']
-                agr_row_set.update(row_set)
-
-    def get_table_eq_classes(self, table_data):
-        table_eq_class_dict = {}  
-        col_data = table_data['columns']
-        row_data = table_data['rows']
-        for col, col_item in enumerate(col_data):
-            eq_class_lst = col_item['eq_class_lst']
-            for eq_class in eq_class_lst:
-                rows = eq_class['rows']
-                row_key = ','.join([str(r) for r in rows])
-                if row_key not in table_eq_class_dict:
-                    table_eq_class_dict[row_key] = eq_class
-                
-                eq_class['row_set'] = set(rows)
-                del eq_class['rows']
-
-        table_eq_classes = list(table_eq_class_dict.values())
-        return table_eq_classes
-
-    def compute_maximal_eq_class(self, table_data):
-        table_eq_classes = self.get_table_eq_classes(table_data)
-        N = len(table_eq_classes)
-        for i in range(N):
-            left_class = table_eq_classes[i]
-            left_set = left_class['row_set']
-            for j in range(N):
-                if j == i:
-                    continue
-                right_set = table_eq_classes[j]['row_set']
-                if left_set.issubset(right_set):
-                    left_class['maximal'] = False
-                    break
-    
-        maximal_class_lst = []
-        for eq_class in table_eq_classes:
-            if eq_class.get('maximal', True):
-                maximal_class_lst.append(eq_class)
-        return maximal_class_lst
-
-    def compute_row_eq_class(self, table_data):
-        col_data = table_data['columns']
-        row_data = table_data['rows']
-        for col, col_item in enumerate(col_data):
-            eq_class_lst = col_item['eq_class_lst']
-            for eq_class in eq_class_lst:
-                class_id = eq_class['id']
-                row_lst = eq_class['rows']
-                for row in row_lst:
-                    row_item = row_data[row]
-                    if 'row_class_set' not in row_item:
-                        row_item['row_class_set'] = set() 
-                    row_class_set = row_item['row_class_set']
-                    row_class_info = f'{col}-{class_id}'
-                    row_class_set.add(row_class_info)
 
     def create_partitions(self, table_data):
         col_data = self.get_col_data(table_data)
