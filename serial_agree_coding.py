@@ -7,6 +7,7 @@ import torch
 import heapq
 from code_book import CodeBook
 from bin_packing import bin_pack
+import random
 
 class AgreeCodingSerializer(TableSerializer):
     def __init__(self):
@@ -387,6 +388,42 @@ class AgreeCodingSerializer(TableSerializer):
         return sorted_row_class_lst
 
     def compute_agree_set(self, table_data):
+        self.create_partitions(table_data)
+        self.sample_agree_sets(table_data)
+
+    def get_col_data(self, table_data):
+        return table_data['columns']
+
+    def get_row_data(self, table_data):
+        return table_data['rows']
+
+    def sample_agree_sets(self, table_data, agr_set_pct=0.3):
+        row_data = self.get_row_data(table_data)
+        num_agree_rows = 100
+        num_rows_to_sample = int(num_agree_rows / agr_set_pct)
+        M = min(num_rows_to_sample, len(row_data))
+        sample_row_lst = random.sample(row_data, M)
+        class_id_lst = [[a['class_id'] for a in row_item['cells']] for row_item in sample_row_lst]
+        data_class = torch.tensor(class_id_lst, dtype=torch.int)
+        N_R,  N_C = data_class.shape 
+        data_class_1 = data_class.view(N_R, -1, N_C).expand(-1, N_R, -1)
+        data_class_2 = data_class.view(-1, N_R, N_C).expand(N_R, -1, -1)
+        data_mask = (data_class_1 == data_class_2)
+        nonzero_indexes = data_mask.nonzero().numpy()
+        pair_dict = {}
+        for entry in nonzero_indexes:
+            i, j, k = entry.tolist()
+            if j <= i:
+                continue
+            pair_key = f'{i},{j}'
+            if pair_key not in pair_dict:
+                pair_dict[pair_key] = {'agr_cols':[]}
+            agr_cols = pair_dict[pair_key]['agr_cols']
+            agr_cols.append(k)
+       
+
+
+    def compute_agree_set_2(self, table_data):
         self.create_stripped_partitions(table_data)
         self.compute_row_eq_class(table_data)        
         maximal_class_lst = self.compute_maximal_eq_class(table_data)
@@ -492,34 +529,19 @@ class AgreeCodingSerializer(TableSerializer):
                     row_class_info = f'{col}-{class_id}'
                     row_class_set.add(row_class_info)
 
-    def create_stripped_partitions(self, table_data):
-        col_data = table_data['columns']
-        row_data = table_data['rows']
+    def create_partitions(self, table_data):
+        col_data = self.get_col_data(table_data)
+        row_data = self.get_row_data(table_data)
         for col, col_item in enumerate(col_data):
             ptn_dict = {}
+            class_id = 0
             for row, row_item in enumerate(row_data):
                 cell_info = row_data[row]['cells'][col]
                 cell_text = cell_info['text']
-                if cell_text == '':
-                    continue
                 key = util.get_hash_key(cell_text)
                 if key not in ptn_dict:
-                    ptn_dict[key] = {'rows':[]}
-                row_lst = ptn_dict[key]['rows']
-                row_lst.append(row)
-
-            eq_class_lst = []
-            class_id = 0
-            for key in ptn_dict:
-                row_lst = ptn_dict[key]['rows']
-                if len(row_lst) == 1:
-                    continue
-                eq_class = {
-                    'col':col,
-                    'id':class_id,
-                    'rows':row_lst
-                }
-                class_id += 1
-                eq_class_lst.append(eq_class)
-            col_item['eq_class_lst'] = eq_class_lst
-
+                    ptn_dict[key] = {'class_id':class_id}
+                    class_id += 1
+                row_class_id = ptn_dict[key]['class_id']
+                row_item['cells'][col]['class_id'] = row_class_id
+            
