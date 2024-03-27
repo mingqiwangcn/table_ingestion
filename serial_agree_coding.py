@@ -108,6 +108,23 @@ class AgreeCodingSerializer(TableSerializer):
                 group_matched_keys.extend(attr_group_dict[group_key]['agr_keys'])
         return group_matched_keys
 
+    def index_by_agr_set(self, table_data, schema_block, row_to_serial_set):
+        row_data  = self.get_row_data(table_data)
+        for col_group in agr_set_lst:
+            agr_dict = {}
+            for row, row_item in enumerate(row_data):
+                row_cells = row_item['cells']
+                agr_class_lst = [row_cells[col]['class_id'] for col in col_group]
+                agr_key = tuple(agr_class_lst)
+                if agr_key not in agr_dict:
+                    agr_dict[agr_key] = {'rows':[]}
+                agr_rows = agr_dict[agr_key]['rows']
+                agr_rows.append(row)
+            
+            col_name_lst = self.show_col_names(table_data, col_group)
+            print('sample ', sample_number, 'col groups', col_name_lst, 
+                  'total rows =', len(row_data), 'agr sets', len(agr_dict))
+
     def get_wnd_block(self, table_data, schema_block, row_to_serial_set):
         col_group_lst = schema_block['cols']
         for _ in range(len(serial_agr_key_lst)):
@@ -249,9 +266,9 @@ class AgreeCodingSerializer(TableSerializer):
 
     def map_col_to_set(self, col_set_lst):
         col_set_map = {}
-        for col_set in col_set_lst:
+        for offset, col_set in enumerate(col_set_lst):
             for col in col_set:
-                col_set_map[col] = col_set
+                col_set_map[col] = {'col_set':col_set, 'offset':offset}
         return col_set_map
     
     def get_column_serial(self, col_data, col_group):
@@ -302,7 +319,7 @@ class AgreeCodingSerializer(TableSerializer):
         return block_lst 
 
     def get_fit_col_groups(self, col_data, disjoint_set_lst, max_size):
-        col_sets_to_index = set()
+        col_sets_to_index = {}
         col_set_map = self.map_col_to_set(disjoint_set_lst)
         fit_group_lst = []
         block_col_set = set()
@@ -311,10 +328,11 @@ class AgreeCodingSerializer(TableSerializer):
                 continue # col may be already included in a group
             col_group = None
             if col in col_set_map:
-                col_group = list(col_set_map[col])
+                col_group = list(col_set_map[col]['col_set'])
                 sub_group_lst = self.split_col_group(col_data, col_group, max_size)
                 fit_group_lst.extend(sub_group_lst)
-                col_sets_to_index.update(set([tuple(a) for a in sub_group_lst]))
+                for sub_group in sub_group_lst:
+                    col_sets_to_index[tuple(sub_group)] = {'offset':col_set_map[col]['offset']}
             else:
                 col_group = [col]
                 fit_group_lst.append(col_group)
@@ -343,12 +361,20 @@ class AgreeCodingSerializer(TableSerializer):
 
     def get_block_info(self, col_group_lst, block_text, block_size, col_sets_to_index):
         updated_block_text = block_text.rstrip()[:-1] + self.tokenizer.sep_token
+        block_col_sets_to_index = []
+        for col_group in col_group_lst:
+            tuple_group = tuple(col_group)
+            if tuple_group in col_sets_to_index:
+                offset = col_sets_to_index[tuple_group]['offset']
+                block_col_sets_to_index.append({'col_group':col_group, 'offset':offset})
+        sorted_block_col_sets_to_index = sorted(block_col_sets_to_index, key=lambda x:x['offset'])
         block_info = {
             'cols':col_group_lst,
             'text':updated_block_text,
             'size':block_size,
-            'col_sets_to_index':col_sets_to_index
+            'col_sets_to_index':sorted_block_col_sets_to_index
         }
+        import pdb; pdb.set_trace()
         return block_info
 
     def compute_agree_set(self, table_data):
@@ -356,23 +382,6 @@ class AgreeCodingSerializer(TableSerializer):
         agr_set_lst = self.sample_agr_set(table_data)
         return agr_set_lst
 
-    def index_by_agr_set(self, table_data, agr_set_lst):
-        row_data  = self.get_row_data(table_data)
-        for col_group in agr_set_lst:
-            agr_dict = {}
-            for row, row_item in enumerate(row_data):
-                row_cells = row_item['cells']
-                agr_class_lst = [row_cells[col]['class_id'] for col in col_group]
-                agr_key = tuple(agr_class_lst)
-                if agr_key not in agr_dict:
-                    agr_dict[agr_key] = {'rows':[]}
-                agr_rows = agr_dict[agr_key]['rows']
-                agr_rows.append(row)
-            
-            col_name_lst = self.show_col_names(table_data, col_group)
-            print('sample ', sample_number, 'col groups', col_name_lst, 
-                  'total rows =', len(row_data), 'agr sets', len(agr_dict))
-    
     def show_col_names(self, table_data, col_group):
         col_data = self.get_col_data(table_data)
         col_name_lst = [col_data[col]['text'] for col in col_group]
