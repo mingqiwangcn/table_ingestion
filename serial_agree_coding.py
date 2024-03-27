@@ -22,18 +22,18 @@ class AgreeCodingSerializer(TableSerializer):
         while len(agr_set_lst) > 0:
             disjoint_set_lst = self.compute_disjoint_groups(agr_set_lst)
             schema_block_lst = self.split_columns(disjoint_set_lst, table_data)
-            for schema_block in schema_block_lst:
-                yield from self.serialize_schema_block(table_data, schema_block, row_serial_done_set)
+            yield from self.serialize_schema_block(table_data, schema_block_lst, row_serial_done_set)
             self.remove_agr_sets(agr_set_lst, disjoint_set_lst)
 
     def remove_agr_sets(self, agr_group_lst, disjoint_group_lst):
         for group in disjoint_group_lst:
             agr_group_lst.remove(group)
   
-    def serialize_schema_block(self, table_data, schema_block, row_serial_done_set):
-        schema_text = self.get_window_schema_text(table_data, schema_block)
-        self.serial_window.set_schema_text(schema_text)
-        yield from self.get_wnd_block(table_data, schema_block, agr_dict, attr_group_dict)
+    def serialize_schema_block(self, table_data, schema_block_lst, row_serial_done_set):
+        for schema_block in schema_block_lst:
+            schema_text = self.get_window_schema_text(table_data, schema_block)
+            self.serial_window.set_schema_text(schema_text)
+            yield from self.get_wnd_block(table_data, schema_block, agr_dict, attr_group_dict)
   
     def get_window_schema_text(self, table_data, schema_block):
         schema_text = table_data['documentTitle'] + ' ' + self.tokenizer.sep_token + ' ' + schema_block['text'] + ' '
