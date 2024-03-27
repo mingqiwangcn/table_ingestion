@@ -16,41 +16,11 @@ class AgreeCodingSerializer(TableSerializer):
         self.serial_window.set_cell_code_book(CodeBook(self.tokenizer))
 
     def do_serialize(self, table_data):
-        agr_dict = self.compute_agree_set(table_data)
-        attr_group_dict = self.compute_agr_attrs(agr_dict, table_data)
-        schema_block_lst = self.split_columns(attr_group_dict, table_data)
-        self.assign_agr_key_to_schema_block(schema_block_lst, agr_dict)
+        agr_set_lst = self.compute_agree_set(table_data)
+        schema_block_lst = self.split_columns(agr_set_lst, table_data)
         for schema_block in schema_block_lst:
             yield from self.serialize_schema_block(table_data, schema_block, agr_dict, attr_group_dict)
   
-    def assign_agr_key_to_schema_block(self, schema_block_lst, agr_dict):
-        agr_key_to_assign_set = set(agr_dict.keys())
-        for schema_block in schema_block_lst:
-            block_agr_map = {}
-            schema_block['agr_map'] = block_agr_map
-            schema_col_group_lst = schema_block['cols']
-            schema_col_lst = []
-            for col_group in schema_col_group_lst:
-                schema_col_lst.extend(col_group)
-            schema_col_set = set(schema_col_lst)
-            exact_matched_key_lst = []
-            for key in agr_key_to_assign_set:
-                agr_item = agr_dict[key]
-                agr_class_lst = agr_item['agr_class_lst']
-                agr_col_group = self.agr_class_to_col_group(agr_class_lst)
-                agr_col_set = set(agr_col_group)
-                inter_set = agr_col_set.intersection(schema_col_set)
-                if len(inter_set) == 0:
-                    continue
-                matched_offset = None
-                if agr_col_group in schema_col_group_lst:
-                    matched_offset = schema_col_group_lst.index(agr_col_group)
-                    exact_matched_key_lst.append(key)
-                block_agr_map[key] = {'matched_offset':matched_offset} 
-            
-            for matched_key in exact_matched_key_lst:
-                agr_key_to_assign_set.remove(matched_key)
-
     def serialize_schema_block(self, table_data, schema_block, agr_dict, attr_group_dict):
         schema_text = self.get_window_schema_text(table_data, schema_block)
         self.serial_window.set_schema_text(schema_text)
@@ -232,30 +202,43 @@ class AgreeCodingSerializer(TableSerializer):
                 agr_row_set = agr_dict[agr_key]['row_set']
                 pair_row = [sample_row_lst[i], sample_row_lst[j]]
                 agr_row_set.update(set(pair_row))
+        
+        # get top K agr-set cols to index table, they may overlap but it is ok
+        top_agr_key_lst = self.compute_top_agr_sets(agr_dict, table_data)
+        return top_agr_key_lst
 
-        self.compute_agr_weight(agr_dict, table_data)
-        max_disjoint_sets = self.compute_max_disjoint_agr_set(agr_dict)
-        agr_set_lst = [a[2] for a in max_disjoint_sets]
-        return agr_set_lst
+    def compute_top_agr_sets(self, agr_dict, table_data):
+        import pdb; pdb.set_trace()
+        top_agr_key_lst= []
+        key_set = set(agr_dict.keys())
+        k = 0
+        while k < len(agr_dict):
+            if len(top_agr_key_lst) >= 3:
+                break
+            self.compute_agr_weight(key_set, agr_dict)
+            item_lst = [(- agr_dict[a]['weight'], a) for a in key_set]
+            heapq.heapify(item_lst)
+            top_item = heapq.heappop(item_lst)
+            top_key = top_item[1]
+            top_agr_key_lst.append(top_key)
+            key_set.remove(top_key)
+            self.update_agr_row_set(top_key, key_set, agr_dict)
+            k += 1
+        return top_agr_key_lst
+    
+    def update_agr_row_set(self, top_key, key_set, agr_dict):
+        top_row_set = agr_dict[top_key]['row_set']
+        for key in key_set:
+            agr_item = agr_dict[key]
+            agr_item['row_set'] -= top_row_set
 
-    def compute_agr_weight(self, agr_dict, table_data):
-        attr_group_dict = {}
-        row_data = self.get_row_data(table_data)
-        for key in agr_dict:
+    def compute_agr_weight(self, key_set, agr_dict):
+        for key in key_set:
             col_group = list(key)
             agr_item = agr_dict[key]
             row_set = agr_item['row_set']
             agr_item['weight'] = len(col_group) * len(row_set)
-
-    def compute_max_disjoint_agr_set(self, agr_dict):
-        col_set_lst = []  
-        for key in agr_dict:
-            group = list(key)
-            agr_item = agr_dict[key]
-            col_set = (set(group), agr_item['weight'], key)
-            col_set_lst.append(col_set)
-        max_disjoint_sets = util.set_packing(col_set_lst)
-        return max_disjoint_sets
+        
 
     def col_to_max_attr_set(self, attr_set_lst):
         col_set_dict = {}
@@ -344,11 +327,10 @@ class AgreeCodingSerializer(TableSerializer):
 
     def compute_agree_set(self, table_data):
         self.create_partitions(table_data)
-        for sample_number in range(3):
-            agr_set_lst = self.sample_agr_set(table_data)
-            self.index_by_agr_set(table_data, agr_set_lst, sample_number)
+        agr_set_lst = self.sample_agr_set(table_data)
+        return agr_set_lst
 
-    def index_by_agr_set(self, table_data, agr_set_lst, sample_number):
+    def index_by_agr_set(self, table_data, agr_set_lst):
         row_data  = self.get_row_data(table_data)
         for col_group in agr_set_lst:
             agr_dict = {}
@@ -360,9 +342,16 @@ class AgreeCodingSerializer(TableSerializer):
                     agr_dict[agr_key] = {'rows':[]}
                 agr_rows = agr_dict[agr_key]['rows']
                 agr_rows.append(row)
-            print('sample ', sample_number, 'col groups', len(col_group), 
+            
+            col_name_lst = self.show_col_names(table_data, col_group)
+            print('sample ', sample_number, 'col groups', col_name_lst, 
                   'total rows =', len(row_data), 'agr sets', len(agr_dict))
     
+    def show_col_names(self, table_data, col_group):
+        col_data = self.get_col_data(table_data)
+        col_name_lst = [col_data[col]['text'] for col in col_group]
+        return col_name_lst
+
     def get_col_data(self, table_data):
         return table_data['columns']
 
