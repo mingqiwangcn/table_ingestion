@@ -17,11 +17,20 @@ class AgreeCodingSerializer(TableSerializer):
 
     def do_serialize(self, table_data):
         agr_set_lst = self.compute_agree_set(table_data)
-        schema_block_lst = self.split_columns(agr_set_lst, table_data)
-        for schema_block in schema_block_lst:
-            yield from self.serialize_schema_block(table_data, schema_block, agr_dict, attr_group_dict)
+        # Need to keep rows serialized already by previous agr_set
+        row_serial_done_set = set()
+        while len(agr_set_lst) > 0:
+            disjoint_set_lst = self.compute_disjoint_groups(agr_set_lst)
+            schema_block_lst = self.split_columns(disjoint_set_lst, table_data)
+            for schema_block in schema_block_lst:
+                yield from self.serialize_schema_block(table_data, schema_block, row_serial_done_set)
+            self.remove_agr_sets(agr_set_lst, disjoint_set_lst)
+
+    def remove_agr_sets(self, agr_group_lst, disjoint_group_lst):
+        for group in disjoint_group_lst:
+            agr_group_lst.remove(group)
   
-    def serialize_schema_block(self, table_data, schema_block, agr_dict, attr_group_dict):
+    def serialize_schema_block(self, table_data, schema_block, row_serial_done_set):
         schema_text = self.get_window_schema_text(table_data, schema_block)
         self.serial_window.set_schema_text(schema_text)
         yield from self.get_wnd_block(table_data, schema_block, agr_dict, attr_group_dict)
@@ -208,7 +217,6 @@ class AgreeCodingSerializer(TableSerializer):
         return top_agr_key_lst
 
     def compute_top_agr_sets(self, agr_dict, table_data):
-        import pdb; pdb.set_trace()
         top_agr_key_lst= []
         key_set = set(agr_dict.keys())
         k = 0
@@ -253,12 +261,29 @@ class AgreeCodingSerializer(TableSerializer):
         serial_size = sum([col_data[a]['size'] for a in col_group]) + len(col_name_lst) 
         return (serial_text, serial_size)
 
+    def compute_disjoint_groups(self, agr_group_lst):
+        item_lst = [(a, set(a)) for a in agr_group_lst]
+        disjoint_item_lst = [item_lst[0]]
+        N = len(item_lst)
+        for offset in range(1, N):
+            item = item_lst[offset]
+            over_lapped = False
+            for chosen_item in disjoint_item_lst:
+                inter_set = item[1].intersection(chosen_item[1])
+                if len(inter_set) > 0:
+                    over_lapped = True
+                    break
+            if not over_lapped:
+                disjoint_item_lst.append(item)
+        
+        disjoint_group_lst = [a[0] for a in disjoint_item_lst]
+        return disjoint_group_lst
+
     # Use a single partition for all to share schema. 
     # Try to put agree groups in the same schema group
-    def split_columns(self, attr_group_dict, table_data):
-        col_data = table_data['columns']
-        max_disjoint_attr_sets = self.compute_max_disjoint_attr_sets(attr_group_dict)
-        col_max_set_dict = self.col_to_max_attr_set(max_disjoint_attr_sets)
+    def split_columns(self, agr_set_lst, table_data):
+        col_data = self.get_col_data(table_data)
+        col_max_set_dict = self.col_to_max_attr_set(agr_set_lst)
         Schema_Max_Size = int(self.serial_window.wnd_size * util.Max_Header_Meta_Ratio)
         group_item_lst = []
         fit_group_lst = self.get_fit_col_groups(col_data, col_max_set_dict, Schema_Max_Size)
