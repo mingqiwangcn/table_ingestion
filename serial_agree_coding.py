@@ -17,27 +17,24 @@ class AgreeCodingSerializer(TableSerializer):
 
     def do_serialize(self, table_data):
         agr_set_lst = self.compute_agree_set(table_data)
-        # Need to keep rows serialized already by previous agr_set
-        row_serial_done_set = set()
         row_data = self.get_row_data(table_data)
-        row_set = set(range(len(row_data)))
-        while len(agr_set_lst) > 0:
-            disjoint_set_lst = self.compute_disjoint_groups(agr_set_lst)
-            schema_block_lst = self.split_columns(disjoint_set_lst, table_data)
+        row_itr_to_index = range(len(row_data))
+        for agr_set in agr_set_lst:
+            index_info = self.index_by_agr_set(row_data, agr_set, row_itr_to_index)
+            agr_pq_index, row_set_not_indexed = index_info
+            schema_block_lst = self.split_columns(agr_set, table_data)
             yield from self.serialize_schema_block(table_data, schema_block_lst, 
-                                                   row_set, row_serial_done_set)
-            self.remove_agr_sets(agr_set_lst, disjoint_set_lst)
+                                                   agr_pq_index)
 
-    def remove_agr_sets(self, agr_group_lst, disjoint_group_lst):
-        for group in disjoint_group_lst:
-            agr_group_lst.remove(group)
-  
-    def serialize_schema_block(self, table_data, schema_block_lst, row_set, row_serial_done_set):
-        row_to_serial_set = row_set - row_serial_done_set
+            if len(row_set_not_indexed) == 0:
+                break
+            row_itr_to_index = row_set_not_indexed
+            
+    def serialize_schema_block(self, table_data, schema_block_lst, agr_pq_index):
         for schema_block in schema_block_lst:
             schema_text = self.get_window_schema_text(table_data, schema_block)
             self.serial_window.set_schema_text(schema_text)
-            yield from self.get_wnd_block(table_data, schema_block, row_to_serial_set)
+            yield from self.get_wnd_block(table_data, schema_block, agr_pq_index)
   
     def get_window_schema_text(self, table_data, schema_block):
         schema_text = table_data['documentTitle'] + ' ' + self.tokenizer.sep_token + ' ' + schema_block['text'] + ' '
@@ -108,40 +105,54 @@ class AgreeCodingSerializer(TableSerializer):
                 group_matched_keys.extend(attr_group_dict[group_key]['agr_keys'])
         return group_matched_keys
 
-    def index_by_agr_set(self, table_data, schema_block, row_to_serial_set):
-        row_data  = self.get_row_data(table_data)
-        for col_group in agr_set_lst:
-            agr_dict = {}
-            for row, row_item in enumerate(row_data):
-                row_cells = row_item['cells']
-                agr_class_lst = [row_cells[col]['class_id'] for col in col_group]
-                agr_key = tuple(agr_class_lst)
-                if agr_key not in agr_dict:
-                    agr_dict[agr_key] = {'rows':[]}
-                agr_rows = agr_dict[agr_key]['rows']
-                agr_rows.append(row)
-            
-            col_name_lst = self.show_col_names(table_data, col_group)
-            print('sample ', sample_number, 'col groups', col_name_lst, 
-                  'total rows =', len(row_data), 'agr sets', len(agr_dict))
+    def index_by_agr_set(self, row_data, agr_set, row_itr_to_index):
+        agr_index = {}
+        for row in row_itr_to_index:
+            row_item = row_data[row]
+            row_cells = row_item['cells']
+            agr_class_lst = [row_cells[col]['class_id'] for col in agr_set]
+            agr_key = tuple(agr_class_lst)
+            if agr_key not in agr_index:
+                agr_index[agr_key] = {'rows':[]}
+            agr_rows = agr_index[agr_key]['rows']
+            agr_rows.append(row)
+        
+        serial_key_info_lst = []
+        non_agr_key_lst = []
+        row_set_not_indexed = set()
+        for key in agr_index:
+            agr_item = agr_index[key]
+            item_row_set = agr_item['rows']
+            num_rows = len(item_row_set)
+            if num_rows < 2:
+                non_agr_key_lst.append(key)
+                row_set_not_indexed.update(set(num_rows))
+            else:
+                key_info = (-num_rows, key)
+                serial_key_info_lst.append(key_info)
 
-    def get_wnd_block(self, table_data, schema_block, row_to_serial_set):
+        for key in non_agr_key_lst:
+            del agr_index[key]
+
+        heapq.heapify(serial_key_info_lst)
+        sorted_agr_key_lst = []
+        for _ in range(len(serial_key_info_lst)):
+            _, pq_agr_key = heapq.heappop(serial_key_info_lst)
+            sorted_agr_key_lst.append(pq_agr_key)
+
+        agr_pq_index = {'agr_set':agr_set, 'keys':sorted_agr_key_lst, 'index': agr_index}
+        return agr_pq_index, row_set_not_indexed
+
+    def get_wnd_block(self, table_data, schema_block, agr_pq_index):
         col_group_lst = schema_block['cols']
-        for _ in range(len(serial_agr_key_lst)):
-            _, agr_key = heapq.heappop(serial_agr_key_lst)
+        agr_group = agr_pq_index['agr_set']
+        agr_group_offset = col_group_lst.index(list(agr_group))
+        agr_key_lst = agr_pq_index['keys']
+        agr_dict = agr_pq_index['index'] 
+        for agr_key in agr_key_lst:
             agr_item = agr_dict[agr_key]
-            row_set_to_serial = agr_item['row_set'] - row_serial_done_set
-            row_lst = list(row_set_to_serial)
-            row_serial_done_set.update(row_set_to_serial)
-            agr_map = block_agr_map[agr_key]
-            agr_group_offset = agr_map['matched_offset']
+            row_lst = agr_item['rows']
             yield from self.serialize_on_row(table_data, row_lst, col_group_lst, agr_group_offset)
-
-        row_data = table_data['rows']
-        table_row_set = set(range(len(row_data)))
-        other_row_lst = list(table_row_set - row_serial_done_set)
-        if len(other_row_lst) > 0:
-            yield from self.serialize_on_row(table_data, other_row_lst, col_group_lst, None)
 
         if self.serial_window.can_pop():
             serial_block = self.serial_window.pop(table_data)
@@ -264,11 +275,10 @@ class AgreeCodingSerializer(TableSerializer):
             agr_item['weight'] = len(col_group) * len(row_set)
         
 
-    def map_col_to_set(self, col_set_lst):
+    def map_col_to_set(self, col_set):
         col_set_map = {}
-        for offset, col_set in enumerate(col_set_lst):
-            for col in col_set:
-                col_set_map[col] = {'col_set':col_set, 'offset':offset}
+        for col in col_set:
+            col_set_map[col] = col_set
         return col_set_map
     
     def get_column_serial(self, col_data, col_group):
@@ -297,12 +307,11 @@ class AgreeCodingSerializer(TableSerializer):
 
     # Use a single partition for all to share schema. 
     # Try to put agree groups in the same schema group
-    def split_columns(self, disjoint_set_lst, table_data):
+    def split_columns(self, agr_set, table_data):
         col_data = self.get_col_data(table_data)
         Schema_Max_Size = int(self.serial_window.wnd_size * util.Max_Header_Meta_Ratio)
         group_item_lst = []
-        fit_group_lst, col_sets_to_index = self.get_fit_col_groups(col_data, disjoint_set_lst,      
-                                                                   Schema_Max_Size)
+        fit_group_lst = self.get_fit_col_groups(col_data, agr_set, Schema_Max_Size)
         for col_group in fit_group_lst:
             serial_text, serial_size = self.get_column_serial(col_data, col_group)
             group_item = [col_group, serial_size, serial_text]
@@ -314,13 +323,12 @@ class AgreeCodingSerializer(TableSerializer):
             col_group_lst = [a[0] for a in bin_entry.item_lst]
             block_text = ''.join([a[2] for a in bin_entry.item_lst])
             block_size = sum([a[1] for a in bin_entry.item_lst])
-            block_info = self.get_block_info(col_group_lst, block_text, block_size, col_sets_to_index)
+            block_info = self.get_block_info(col_group_lst, block_text, block_size)
             block_lst.append(block_info)
         return block_lst 
 
-    def get_fit_col_groups(self, col_data, disjoint_set_lst, max_size):
-        col_sets_to_index = {}
-        col_set_map = self.map_col_to_set(disjoint_set_lst)
+    def get_fit_col_groups(self, col_data, agr_set, max_size):
+        col_set_map = self.map_col_to_set(agr_set)
         fit_group_lst = []
         block_col_set = set()
         for col, _ in enumerate(col_data):
@@ -328,16 +336,14 @@ class AgreeCodingSerializer(TableSerializer):
                 continue # col may be already included in a group
             col_group = None
             if col in col_set_map:
-                col_group = list(col_set_map[col]['col_set'])
+                col_group = list(col_set_map[col])
                 sub_group_lst = self.split_col_group(col_data, col_group, max_size)
                 fit_group_lst.extend(sub_group_lst)
-                for sub_group in sub_group_lst:
-                    col_sets_to_index[tuple(sub_group)] = {'offset':col_set_map[col]['offset']}
             else:
                 col_group = [col]
                 fit_group_lst.append(col_group)
             block_col_set.update(set(col_group))
-        return fit_group_lst, col_sets_to_index
+        return fit_group_lst
 
     def split_col_group(self, col_data, col_group, max_size):
         group_size = sum([col_data[col]['size'] + 1 for col in col_group])
@@ -359,22 +365,13 @@ class AgreeCodingSerializer(TableSerializer):
             sub_group_lst.append(sub_group)
         return sub_group_lst
 
-    def get_block_info(self, col_group_lst, block_text, block_size, col_sets_to_index):
+    def get_block_info(self, col_group_lst, block_text, block_size):
         updated_block_text = block_text.rstrip()[:-1] + self.tokenizer.sep_token
-        block_col_sets_to_index = []
-        for col_group in col_group_lst:
-            tuple_group = tuple(col_group)
-            if tuple_group in col_sets_to_index:
-                offset = col_sets_to_index[tuple_group]['offset']
-                block_col_sets_to_index.append({'col_group':col_group, 'offset':offset})
-        sorted_block_col_sets_to_index = sorted(block_col_sets_to_index, key=lambda x:x['offset'])
         block_info = {
             'cols':col_group_lst,
             'text':updated_block_text,
-            'size':block_size,
-            'col_sets_to_index':sorted_block_col_sets_to_index
+            'size':block_size
         }
-        import pdb; pdb.set_trace()
         return block_info
 
     def compute_agree_set(self, table_data):
