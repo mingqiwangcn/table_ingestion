@@ -8,6 +8,7 @@ import heapq
 from code_book import CodeBook
 from bin_packing import bin_pack
 import random
+import numpy as np
 
 class AgreeCodingSerializer(TableSerializer):
     def __init__(self):
@@ -19,7 +20,7 @@ class AgreeCodingSerializer(TableSerializer):
         agr_set_lst = self.compute_agree_set(table_data)
         row_data = self.get_row_data(table_data)
         row_itr_to_index = range(len(row_data))
-        for offset, agr_set in tqdm(enumerate(agr_set_lst), total=len(agr_set_lst), desc='agree sets'):
+        for offset, agr_set in enumerate(agr_set_lst):
             if offset == (len(agr_set_lst) - 1):
                 index_all_rows = True
             else:
@@ -252,7 +253,7 @@ class AgreeCodingSerializer(TableSerializer):
         k = 0
         Max_Num_Agr_Set = 32
         while k < len(agr_dict):
-            if len(top_agr_key_lst) >= Max_Num_Agr_Set:
+            if len(top_agr_key_lst) >= (Max_Num_Agr_Set - 1):
                 break
             self.compute_agr_weight(key_set, agr_dict)
             item_lst = [(- agr_dict[a]['weight'], a) for a in key_set]
@@ -403,6 +404,8 @@ class AgreeCodingSerializer(TableSerializer):
     def compute_agree_set(self, table_data):
         self.create_partitions(table_data)
         agr_set_lst = self.sample_agr_set(table_data)
+        max_weight_col = self.get_max_weight_col(table_data)
+        agr_set_lst.append([max_weight_col])
         return agr_set_lst
 
     def show_col_names(self, table_data, col_group):
@@ -427,8 +430,32 @@ class AgreeCodingSerializer(TableSerializer):
                 cell_text = cell_info['text']
                 key = util.get_hash_key(cell_text)
                 if key not in ptn_dict:
-                    ptn_dict[key] = {'class_id':class_id}
+                    ptn_dict[key] = {'class_id':class_id, 'size':cell_info['size'], 'num_rows':0}
                     class_id += 1
-                row_class_id = ptn_dict[key]['class_id']
+                
+                class_info = ptn_dict[key]
+                row_class_id = class_info['class_id']
                 row_item['cells'][col]['class_id'] = row_class_id
+                class_info['num_rows'] += 1
             
+            col_weight = self.compute_col_weight(ptn_dict)
+            col_item['col_weight'] = col_weight
+    
+    def compute_col_weight(self, ptn_dict):
+        weight = 0
+        for key in ptn_dict:
+            class_info = ptn_dict[key]
+            num_rows = class_info['num_rows']
+            size = class_info['size']
+            num_compressed = num_rows * size - (num_rows + size + 3)
+            if num_compressed < 0:
+                num_compressed = 0
+            weight += num_compressed
+        return weight
+
+    def get_max_weight_col(self, table_data):
+        col_data = self.get_col_data(table_data)
+        col_weight_lst = [a['col_weight'] for a in col_data]
+        max_col = int(np.argmax(col_weight_lst))
+        return max_col
+        
