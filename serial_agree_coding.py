@@ -247,7 +247,7 @@ class AgreeCodingSerializer(TableSerializer):
         top_agr_key_lst= []
         key_set = set(agr_dict.keys())
         k = 0
-        Max_Num_Agr_Set = 16
+        Max_Num_Agr_Set = 32
         while k < len(agr_dict):
             if len(top_agr_key_lst) >= Max_Num_Agr_Set:
                 break
@@ -314,12 +314,45 @@ class AgreeCodingSerializer(TableSerializer):
         block_lst = []
         bin_lst = bin_pack(group_item_lst, Schema_Max_Size)
         for bin_entry in bin_lst:
-            col_group_lst = [a[0] for a in bin_entry.item_lst]
+            col_group_lst, agr_group_offset = self.create_block_col_groups(bin_entry, fit_agr_set_lst)
             block_text = ''.join([a[2] for a in bin_entry.item_lst])
             block_size = sum([a[1] for a in bin_entry.item_lst])
-            block_info = self.get_block_info(col_group_lst, block_text, block_size, fit_agr_set_lst)
+            block_info = self.get_block_info(col_group_lst, block_text, block_size, agr_group_offset)
             block_lst.append(block_info)
         return block_lst 
+
+    def create_block_col_groups(self, bin_entry, fit_agr_set_lst):
+        bin_col_group_lst = [a[0] for a in bin_entry.item_lst]
+        agr_group_offset_lst = []
+        for offset, col_group in enumerate(bin_col_group_lst):
+            if col_group in fit_agr_set_lst:
+                agr_group_offset_lst.append(offset)
+        
+        if len(agr_group_offset_lst) >= 2:
+            import pdb; pdb.set_trace()
+            print()
+
+        col_group_lst = None
+        agr_group_offset = None
+        
+        if len(agr_group_offset_lst) <= 1:
+            col_group_lst = bin_col_group_lst
+            if len(agr_group_offset_lst) == 1:
+                agr_group_offset = agr_group_offset_lst[0]
+        else:    
+            col_group_lst = []
+            for offset, col_group in enumerate(bin_col_group_lst):
+                if offset not in agr_group_offset_lst:
+                    col_group_lst.append(col_group)
+                else:
+                    if offset == agr_group_offset_lst[0]:
+                        merged_col_group = []
+                        for agr_offset in agr_group_offset_lst:
+                            merged_col_group.extend(bin_col_group_lst[agr_offset])
+                        agr_group_offset = len(col_group_lst)
+                        col_group_lst.append(merged_col_group)
+
+        return col_group_lst, agr_group_offset
 
     def get_fit_col_groups(self, col_data, agr_set, max_size):
         fit_agr_set_lst = []
@@ -358,17 +391,8 @@ class AgreeCodingSerializer(TableSerializer):
             sub_group_lst.append(sub_group)
         return sub_group_lst
 
-    def get_block_info(self, col_group_lst, block_text, block_size, fit_agr_set_lst):
+    def get_block_info(self, col_group_lst, block_text, block_size, agr_group_offset):
         updated_block_text = block_text.rstrip()[:-1] + self.tokenizer.sep_token
-        agr_group_offset_lst = []
-        for offset, col_group in enumerate(col_group_lst):
-            if col_group in fit_agr_set_lst:
-                agr_group_offset_lst.append(offset)
-        
-        agr_group_offset = None
-        if len(agr_group_offset_lst) > 0:
-            agr_group_offset = agr_group_offset_lst[0] 
-
         block_info = {
             'cols':col_group_lst,
             'text':updated_block_text,
