@@ -19,8 +19,13 @@ class AgreeCodingSerializer(TableSerializer):
         agr_set_lst = self.compute_agree_set(table_data)
         row_data = self.get_row_data(table_data)
         row_itr_to_index = range(len(row_data))
-        for agr_set in tqdm(agr_set_lst, desc='agree sets'):
-            index_info = self.index_by_agr_set(row_data, agr_set, row_itr_to_index)
+        for offset, agr_set in tqdm(enumerate(agr_set_lst), total=len(agr_set_lst), desc='agree sets'):
+            if offset == (len(agr_set_lst) - 1):
+                index_all_rows = True
+            else:
+                index_all_rows = False
+            
+            index_info = self.index_by_agr_set(row_data, agr_set, row_itr_to_index, index_all_rows)
             agr_pq_index, row_set_not_indexed = index_info
             schema_block_lst = self.split_columns(agr_set, table_data)
             yield from self.serialize_schema_block(table_data, schema_block_lst, 
@@ -29,8 +34,6 @@ class AgreeCodingSerializer(TableSerializer):
             if len(row_set_not_indexed) == 0:
                 break
             row_itr_to_index = row_set_not_indexed
-        
-        print('row_set_not_indexed = ', len(row_set_not_indexed))
             
     def serialize_schema_block(self, table_data, schema_block_lst, agr_pq_index):
         for schema_block in schema_block_lst:
@@ -107,7 +110,7 @@ class AgreeCodingSerializer(TableSerializer):
                 group_matched_keys.extend(attr_group_dict[group_key]['agr_keys'])
         return group_matched_keys
 
-    def index_by_agr_set(self, row_data, agr_set, row_itr_to_index):
+    def index_by_agr_set(self, row_data, agr_set, row_itr_to_index, index_all_rows):
         agr_index = {}
         for row in row_itr_to_index:
             row_item = row_data[row]
@@ -126,7 +129,7 @@ class AgreeCodingSerializer(TableSerializer):
             agr_item = agr_index[key]
             item_row_lst = agr_item['rows']
             num_rows = len(item_row_lst)
-            if num_rows < 2:
+            if (not index_all_rows) and (num_rows < 2):
                 non_agr_key_lst.append(key)
                 row_set_not_indexed.update(set(item_row_lst))
             else:
@@ -327,11 +330,7 @@ class AgreeCodingSerializer(TableSerializer):
         for offset, col_group in enumerate(bin_col_group_lst):
             if col_group in fit_agr_set_lst:
                 agr_group_offset_lst.append(offset)
-        
-        if len(agr_group_offset_lst) >= 2:
-            import pdb; pdb.set_trace()
-            print()
-
+    
         col_group_lst = None
         agr_group_offset = None
         
