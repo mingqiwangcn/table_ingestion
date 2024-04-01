@@ -16,7 +16,7 @@ def main():
     args = get_args()
     retr_file = os.path.join(args.work_dir, 'data', args.dataset, 
                              'query', 'test', args.strategy, 
-                             'fusion_retrieved.jsonl')
+                             'exact/fusion_retrieved.jsonl')
     K = args.top
     with open(retr_file) as f:
         retr_metric_lst = []
