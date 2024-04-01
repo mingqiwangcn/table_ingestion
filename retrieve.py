@@ -19,12 +19,10 @@ def main():
     config = read_config()
     config['text_maxlength'] = util.Max_Seq_Length
     config['min_tables'] = 1
-    if args.index_type is not None:
-        config['index_type'] = args.index_type
-        config['exact_index_dir'] = os.path.abspath(f'./output/{args.dataset}/{args.strategy}/')
-        config['query_batch'] = 10000
-    else:
-        assert (args.n_probe is not None)
+    assert args.index_type == 'exact'
+    config['index_type'] = args.index_type
+    config['exact_index_dir'] = os.path.abspath(f'./output/{args.dataset}/{args.strategy}/')
+    config['query_batch'] = 1000
 
     test_query_dir = os.path.join(args.work_dir, 'data', args.dataset, 'query', 'test')
     if args.index_type is not None:
@@ -36,8 +34,7 @@ def main():
         return
     retr_triples('test', args.work_dir, args.dataset, 
                  test_query_dir, None, False, 
-                 config, strategy=args.strategy, use_tag=False, 
-                 n_probe=args.n_probe)
+                 config, strategy=args.strategy, use_tag=False)
 
 if __name__ == '__main__':
     main()
