@@ -7,14 +7,15 @@ CMP_Dataset = 'nyc_open_100K'
 CMP_Top_Num = 10
  
 def read_retr(retr_file):
-    retr_data = [] 
+    retr_data = []
     with open(retr_file) as f:
         for line in tqdm(f):
             item = json.loads(line)
+            passage_lst = item['passages']
             retr_data.append(item)
     return retr_data
 
-def compare(retr_data_1, retr_data_2):
+def compare_retr(retr_data_1, retr_data_2):
     assert len(retr_data_1) == len(retr_data_2)
     out_q_1y_2n = []
     out_q_1n_2y = []
@@ -81,7 +82,8 @@ def main():
     for pair in cmp_pairs:
         retr_data_1 = retr_dict[pair[0]]
         retr_data_2 = retr_dict[pair[1]]
-        out_cmp_data = compare(retr_data_1, retr_data_2)
+        import pdb; pdb.set_trace()
+        out_cmp_data = compare_retr(retr_data_1, retr_data_2)
         out_name_lst = [None] * 4 
         out_name_lst[0] = f'cmp-top-{CMP_Top_Num}-{pair[0]}-y-{pair[1]}-n-{len(out_cmp_data[0])}.csv'
         out_name_lst[1] = f'cmp-top-{CMP_Top_Num}-{pair[0]}-n-{pair[1]}-y-{len(out_cmp_data[1])}.csv'

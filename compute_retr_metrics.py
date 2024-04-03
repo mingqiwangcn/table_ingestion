@@ -47,7 +47,7 @@ def main():
                 'id':item['id'],
                 'question':item['question'], 
                 'table_id_lst':item['table_id_lst'],
-                'top_correct':int(top_table_lst[0] in table_answer_set),
+                'top_correct':retr_metric,
                 'passages':out_passage_lst,
             }
             f_o.write(json.dumps(out_item) + '\n')
