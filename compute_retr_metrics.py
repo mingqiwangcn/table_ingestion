@@ -54,7 +54,7 @@ def main():
         precision = np.mean(retr_metric_lst) * 100
     f_o.close()
     print('%s precision@%d %.2f' % (args.strategy, args.top, precision))
-    print(f'output retr {out_top_retr_file}')
+    print(f'output {out_top_retr_file}')
 
 def get_top_tables(ctx_lst, num_top_tables):
     table_lst = []
