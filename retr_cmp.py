@@ -64,20 +64,21 @@ def output_retr_data(retr_data, out_file):
 
 def main():
     strategy_lst = ['block', 'schema']
-    retr_dict = {} 
+    retr_dict = {}
+    out_dir = f'./output/{CMP_Dataset}/cmp'
+    if not os.path.isdir(out_dir):
+        os.makedirs(out_dir)
+        
     for strategy in strategy_lst:
         retr_dir = f'/home/cc/code/solo_work/data/{CMP_Dataset}/query/test/{strategy}/exact'
         retr_file = os.path.join(retr_dir, f'retr_{strategy}_top_{CMP_Top_Num}.jsonl')
-        out_file = os.path.join(retr_dir, f'retr_{strategy}_top_{CMP_Top_Num}.csv')
+        out_file = os.path.join(out_dir, f'retr_{strategy}_top_{CMP_Top_Num}.csv')
         with open(retr_file) as f:
             retr_data = read_retr(retr_file)
             retr_dict[strategy] = retr_data
             output_retr_data(retr_data, out_file)
         print(f'output {out_file}\n')
     
-    out_dir = f'/home/cc/code/solo_work/data/{CMP_Dataset}/query/test/cmp_log_top_{CMP_Top_Num}'
-    if not os.path.isdir(out_dir):
-        os.makedirs(out_dir)
     cmp_pairs = [('block', 'schema')]
     for pair in cmp_pairs:
         retr_data_1 = retr_dict[pair[0]]
