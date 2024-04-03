@@ -18,7 +18,7 @@ def main():
                             'query', 'test', args.strategy, 
                             'exact')
     retr_file = os.path.join(out_retr_dir, 'fusion_retrieved.jsonl')
-    out_top_retr_file = os.path.join(out_retr_dir, f'retr_top_{args.top}_table.jsonl')
+    out_top_retr_file = os.path.join(out_retr_dir, f'retr_{args.strategy}_top_{args.top}.jsonl')
     f_o = open(out_top_retr_file, 'w')
     with open(retr_file) as f:
         retr_metric_lst = []
@@ -39,7 +39,7 @@ def main():
         precision = np.mean(retr_metric_lst) * 100
     f_o.close()
     print('%s precision@%d %.2f' % (args.strategy, args.top, precision))
-    print(f'output retr is {out_top_retr_file}')
+    print(f'output retr {out_top_retr_file}')
 
 def get_top_tables(ctx_lst, num_top, table_answer_set):
     table_lst = []
