@@ -82,7 +82,6 @@ def main():
     for pair in cmp_pairs:
         retr_data_1 = retr_dict[pair[0]]
         retr_data_2 = retr_dict[pair[1]]
-        import pdb; pdb.set_trace()
         out_cmp_data = compare_retr(retr_data_1, retr_data_2)
         out_name_lst = [None] * 4 
         out_name_lst[0] = f'cmp-top-{CMP_Top_Num}-{pair[0]}-y-{pair[1]}-n-{len(out_cmp_data[0])}.csv'
