@@ -7,21 +7,20 @@ from serial import TableSerializer
 class SchemaSerializer(TableSerializer):
     def __init__(self):
         super().__init__()
-        self.numeric_serializer = None
 
-    def set_numeric_serializer(self, numeric_serializer):
-        self.numeric_serializer = numeric_serializer
+    def get_cell_serial_text(self, col_data, col, cell_info):
+        cell_text = cell_info['text']
+        cell_serial_text = cell_text + ' | '
+        cell_serial_size = cell_info['size'] + 1
+        return cell_serial_text, cell_serial_size
 
     def get_serial_text(self, table_data, row, block_cols):
         col_data = table_data['columns']
         row_cells = table_data['rows'][row]['cells']
-
         row_serial_cell_lst = []
         for col in block_cols:
             cell_info = row_cells[col] 
-            cell_text = cell_info['text']
-            cell_serial_text = cell_text + ' | '
-            cell_serial_size = cell_info['size'] + 1
+            cell_serial_text, cell_serial_size = self.get_cell_serial_text(col_data, col, cell_info)
             cell_info['serial_text'] = cell_serial_text
             cell_info['serial_size'] = cell_serial_size
             row_serial_cell_lst.append(cell_info)
@@ -29,7 +28,7 @@ class SchemaSerializer(TableSerializer):
         boundary_cell = row_serial_cell_lst[-1]
         boundary_cell['serial_text'] = boundary_cell['serial_text'].rstrip()[:-1] + ' ' + self.tokenizer.sep_token + ' '
         return row_serial_cell_lst
-
+    
     def get_schema_column_text(self, col_name):
         serial_text = col_name + ' | '  
         return serial_text
@@ -69,9 +68,6 @@ class SchemaSerializer(TableSerializer):
         return
 
     def do_serialize(self, table_data):
-        if self.numeric_serializer is not None:
-            self.numeric_serializer.prepare(table_data)
-        
         self.preprocess_other(table_data)
         schema_block_lst = self.split_columns(table_data)
         for schema_block in schema_block_lst:

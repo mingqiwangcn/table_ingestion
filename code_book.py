@@ -34,7 +34,7 @@ class CodeBook:
             compress_code = code + ' is ' + text + ' ' + self.tokenizer.sep_token + ' ' 
             cell_info['compress_code'] = compress_code
             cell_info['cpr_code_size'] = 1 + 1 + cell_info[size_key] + 1
-            cell_info['pre_cells'] = text_info['pre_cells']
+            cell_info['pre_cells'] = code_info['pre_cells']
             return code, 1
         else:
             pre_cell_lst = code_info['pre_cells']
