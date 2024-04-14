@@ -1,4 +1,6 @@
+from serial_schema import SchemaSerializer
 from schema_code_book import SchemaCodeBook
+
 class SchemaCodingSerializer(SchemaSerializer):
     def __init__(self):
         super().__init__()
@@ -15,9 +17,9 @@ class SchemaCodingSerializer(SchemaSerializer):
             schema_code = column_info['text']
             schem_code_size = column_info['size']
         else:
-            code_book = self.serial_window.schema_code_book
+            code_book = self.serial_window.cell_code_book
             schema_code, schem_code_size = code_book.get_code(col_data, col, cell_info)
-        cell_serial_text = schema_code + ' : ' + cell_info['text'] + ' ' + sep_token + ' '
+        cell_serial_text = schema_code + ' : ' + cell_info['text'] + ' ; '
         cell_serial_size = schem_code_size + 1 + cell_info['size'] + 1
         return cell_serial_text, cell_serial_size
     

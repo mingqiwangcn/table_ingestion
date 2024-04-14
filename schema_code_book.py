@@ -5,7 +5,6 @@ class SchemaCodeBook:
         self.reset()
 
     def get_code(self, col_data, col, cell_info):
-        text = cell_info[text_key]
         col_key = col
         if col_key not in self.code_dict:
             self.code_dict[col_key] = {'count':0, 'code':None, 'pre_cells':[]}
