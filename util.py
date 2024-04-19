@@ -82,8 +82,13 @@ def preprocess_schema(tokenizer, table_data):
         col_info['text'] = out_text_lst[offset]
         col_info['size'] = token_size_lst[offset]
 
-    row_cnt = len(table_data['rows'])
-    preprocess_row(tokenizer, table_data, 0, row_cnt) # may use batch in case of large rows.
+    serial_row_col = table_data.get('serial_row_col', None)
+    if serial_row_col is None:
+        row_cnt = len(table_data['rows'])
+        preprocess_row(tokenizer, table_data, 0, row_cnt) # may use batch in case of large rows.
+    else:
+        for row, _ in serial_row_col:
+            preprocess_row(tokenizer, table_data, row, row + 1)
 
 def preprocess_row(tokenizer, table_data, start_row, end_row):
     col_num = len(table_data['columns'])
