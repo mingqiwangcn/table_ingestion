@@ -13,7 +13,9 @@ import numpy as np
 import torch.optim as optim
 from serial_encoder import SerialEncoder
 import datetime
+import transformers
 import torch.nn as nn
+from serial_collator import SerialCollator
 
 def init_worker(args):
     global g_tsl
@@ -160,16 +162,21 @@ def load_strategy_emb(emb_dir):
             emb_dict[p_id] = {'emb':p_emb}
     return emb_dict
 
-def load_cpr_base_map(cpr_dir):
+def load_cpr_data(cpr_dir):
+    special_token_dict = {}
     passge_file = os.path.join(cpr_dir, 'passages.jsonl')
-    cpr_base_map = {}
+    cpr_dict = {}
     with open(passge_file) as f:
         for line in f:
             item = json.loads(line)
+            token_lst = item['tag'].get('special_tokens')
+            if token_lst is not None:
+                for token in token_lst:
+                    special_token_dict[token] = True
             cpr_p_id = item['p_id']
-            base_p_id_lst = item['base_p_id_lst']
-            cpr_base_map[cpr_p_id] = base_p_id_lst
-    return cpr_base_map
+            cpr_dict[cpr_p_id] = item
+    special_token_lst = list(special_token_dict.keys())
+    return cpr_dict, special_token_lst
 
 def get_date_str():
     stamp_info = datetime.datetime.now()
@@ -187,30 +194,41 @@ def main():
     base_dir = os.path.join('./output', args.dataset, args.strategy + '_base')
     base_emb_dir = os.path.join(base_dir, 'emb')
     base_emb_dict = load_strategy_emb(base_emb_dir)
-    cpr_base_map = load_cpr_base_map(cpr_dir)
+    cpr_dict, special_token_lst = load_cpr_data(cpr_dir)
     num_train = int(len(cpr_emb_dict) * 0.8)
     cpr_p_id_lst = list(cpr_emb_dict.keys())
     random.shuffle(cpr_p_id_lst)
     train_cpr_p_id = cpr_p_id_lst[:num_train]
     dev_cpr_p_id = cpr_p_id_lst[num_train:]
     args.device = get_device(0)
-    train(args, train_cpr_p_id, dev_cpr_p_id, cpr_emb_dict, base_emb_dict, cpr_base_map)
+    args.special_token_lst = special_token_lst
+    train(args, train_cpr_p_id, dev_cpr_p_id, cpr_dict, cpr_emb_dict, base_emb_dict)
+
+def get_tokenizer(special_token_lst):
+    tokenizer = transformers.BertTokenizerFast.from_pretrained('bert-base-uncased')
+    if len(special_token_lst) > 0:
+        tokenizer.add_tokens(special_token_lst, special_tokens=True)
+    return tokenizer    
 
 def load_model(args):
-    model = SerialEncoder()
+    model = SerialEncoder(args.tokenizer_size)
     if args.model is not None:
         state_dict = torch.load(args.model, map_location=args.device)
         model.load_state_dict(state_dict)
     model = model.to(args.device)
     return model
     
-def train(args, train_cpr_p_id, dev_cpr_p_id, cpr_emb_dict, base_emb_dict, cpr_base_map):
+def train(args, train_cpr_p_id, dev_cpr_p_id, cpr_dict, cpr_emb_dict, base_emb_dict):
+    tokenizer = get_tokenizer(args.special_token_lst)
+    args.tokenizer_size = len(tokenizer)
     model = load_model(args)
+    collator = SerialCollator(tokenizer)
+
     learing_rate = 1e-3
     optimizer = optim.Adam(model.parameters(), lr=learing_rate)
     loss_func = nn.MSELoss()
     metric_dict = {}
-    max_epoch = 100
+    max_epoch = 200
     for epoch in range(max_epoch):
         model.train()
         random.shuffle(train_cpr_p_id)
@@ -222,16 +240,21 @@ def train(args, train_cpr_p_id, dev_cpr_p_id, cpr_emb_dict, base_emb_dict, cpr_b
             num_batch += 1
             pos = offset + args.batch_size
             batch_cpr_p_id = train_cpr_p_id[offset:pos]
+            batch_cpr_passage = [cpr_dict[a] for a in batch_cpr_p_id]
+            cpr_text_ids = collator(batch_cpr_passage).to(args.device)
             batch_cpr_emb = get_batch_emb(batch_cpr_p_id, cpr_emb_dict).to(args.device)
-            updated_cpr_emb = model(batch_cpr_emb)
-            batch_loss = calc_loss(args, loss_func, updated_cpr_emb, train_cpr_p_id, cpr_base_map, base_emb_dict)
-            print(f'train epoch={epoch} loss={batch_loss.item()} {num_batch}/{total_batch}')
+            updated_cpr_emb = model(cpr_text_ids, batch_cpr_emb)
+            batch_loss = calc_loss(args, loss_func, updated_cpr_emb, 
+                                   train_cpr_p_id, cpr_dict, base_emb_dict)
+            #print(f'train epoch={epoch} loss={batch_loss.item()} {num_batch}/{total_batch}')
             optimizer.zero_grad()
             batch_loss.backward()
             optimizer.step()
         
         save_model(args, epoch, model)
-        evaluate(args, epoch, model, dev_cpr_p_id, cpr_emb_dict, base_emb_dict, cpr_base_map, metric_dict)
+        evaluate(args, epoch, model, 
+                 collator, dev_cpr_p_id, cpr_dict, 
+                 cpr_emb_dict, base_emb_dict, metric_dict)
         
 def save_model(args, epoch, model):
     file_name = 'model.pt'
@@ -239,8 +262,9 @@ def save_model(args, epoch, model):
     torch.save(model.state_dict(), out_path) 
     return out_path
 
-def evaluate(args, epoch, model, dev_cpr_p_id, cpr_emb_dict, 
-             base_emb_dict, cpr_base_map, metric_dict):
+def evaluate(args, epoch, model, 
+             collator, dev_cpr_p_id, cpr_dict,
+             cpr_emb_dict, base_emb_dict, metric_dict):
     num_batch = 0
     total_batch = len(dev_cpr_p_id) // args.batch_size
     if len(dev_cpr_p_id) % args.batch_size:
@@ -255,9 +279,12 @@ def evaluate(args, epoch, model, dev_cpr_p_id, cpr_emb_dict,
             pos = offset + args.batch_size
             batch_cpr_p_id = dev_cpr_p_id[offset:pos]
             count += len(batch_cpr_p_id)
+            batch_cpr_passage = [cpr_dict[a] for a in batch_cpr_p_id]
+            cpr_text_ids = collator(batch_cpr_passage).to(args.device)
             batch_cpr_emb = get_batch_emb(batch_cpr_p_id, cpr_emb_dict).to(args.device)
-            updated_cpr_emb = model(batch_cpr_emb)
-            batch_loss = calc_loss(args, loss_func, updated_cpr_emb, dev_cpr_p_id, cpr_base_map, base_emb_dict)
+            updated_cpr_emb = model(cpr_text_ids, batch_cpr_emb)
+            batch_loss = calc_loss(args, loss_func, updated_cpr_emb, 
+                                   dev_cpr_p_id, cpr_dict, base_emb_dict)
             total_loss += batch_loss.item() * len(updated_cpr_emb)
             
         loss_score = total_loss / len(dev_cpr_p_id)
@@ -282,11 +309,11 @@ def get_device(cuda):
     device = torch.device(("cuda:%d" % cuda) if torch.cuda.is_available() and cuda >=0 else "cpu")
     return device
 
-def calc_loss(args, loss_func, updated_cpr_emb, train_cpr_p_id, cpr_base_map, base_emb_dict):
+def calc_loss(args, loss_func, updated_cpr_emb, train_cpr_p_id, cpr_dict, base_emb_dict):
     total_loss = 0
     for offset, cpr_emb in enumerate(updated_cpr_emb):
         cpr_p_id = train_cpr_p_id[offset]
-        base_p_id_lst = cpr_base_map[cpr_p_id]
+        base_p_id_lst = cpr_dict[cpr_p_id]['base_p_id_lst']
         M = len(base_p_id_lst)
         base_emb = get_batch_emb(base_p_id_lst, base_emb_dict).view(M, -1).to(args.device)
         cpr_emb_expand = cpr_emb.view(1, -1).expand(M, -1)
@@ -305,7 +332,7 @@ def get_args():
     parser.add_argument('--dataset', type=str, required=True)
     parser.add_argument('--strategy', type=str, required=True)
     parser.add_argument('--model', type=str)
-    parser.add_argument('--batch_size', type=int, default=100)
+    parser.add_argument('--batch_size', type=int, default=32)
     args = parser.parse_args()
     return args
 
