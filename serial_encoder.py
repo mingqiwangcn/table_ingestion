@@ -16,7 +16,7 @@ class SerialEncoder(nn.Module):
         super().__init__()
         self.model = transformers.BertModel.from_pretrained('bert-base-uncased')
         prune_layers(self.model)
-        self.model.resize_token_embeddings(tokenizer_size)
+        #self.model.resize_token_embeddings(tokenizer_size)
 
         '''
         input_d = 768
