@@ -5,7 +5,7 @@ import math
 Max_Title_Size = 60
 Max_Col_Header_Size = 30
 Max_Cell_Size = 30
-Max_Header_Meta_Ratio = 0.15 # {sum of header meta tokens} / {window size}
+Max_Header_Meta_Ratio = 0.1 # {sum of header meta tokens} / {window size}
 Max_Seq_Length = 511 # 461
 
 class CellDataType:
