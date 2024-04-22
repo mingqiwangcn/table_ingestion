@@ -34,5 +34,5 @@ class SerialEncoder(nn.Module):
         )
         text_state = text_output['last_hidden_state']
         text_state_mean = torch.mean(text_state, dim=1)
-        output = text_state_mean + cpr_emb  #self.emb_func(cpr_emb) 
+        output = text_state_mean #+ cpr_emb  #self.emb_func(cpr_emb) 
         return output
