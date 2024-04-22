@@ -3,7 +3,7 @@ import os
 from tqdm import tqdm
 import pandas as pd
 
-CMP_Dataset = 'nyc_open_100K'
+CMP_Dataset = 'nyc_open_1000'
 CMP_Top_Num = 10
  
 def read_retr(retr_file):
@@ -70,7 +70,7 @@ def main():
         os.makedirs(out_dir)
         
     for strategy in strategy_lst:
-        retr_dir = f'/home/cc/code/solo_work/data/{CMP_Dataset}/query/test/{strategy}/exact'
+        retr_dir = f'../data/{CMP_Dataset}/query/test/{strategy}/exact'
         retr_file = os.path.join(retr_dir, f'retr_{strategy}_top_{CMP_Top_Num}.jsonl')
         out_file = os.path.join(out_dir, f'retr_{strategy}_top_{CMP_Top_Num}.csv')
         with open(retr_file) as f:
