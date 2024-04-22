@@ -2,6 +2,7 @@ import json
 from tqdm import tqdm
 import os
 from serial_block import BlockSerializer
+from serial_one_row_block import OneRowBlockSerializer
 from serial_schema import SchemaSerializer
 from serial_schema_coding import SchemaCodingSerializer
 from serial_compress import CompressSerializer
@@ -21,6 +22,8 @@ def init_worker(args):
     global tsl
     if args.strategy == 'block':
         tsl = BlockSerializer()
+    elif args.strategy == '1_row_block':
+        tsl = OneRowBlockSerializer()
     elif args.strategy == 'schema':
         tsl = SchemaSerializer()
     elif args.strategy == 'schema_coding':
