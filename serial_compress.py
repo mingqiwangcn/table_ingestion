@@ -31,9 +31,7 @@ class CompressSerializer(SchemaSerializer):
         return
 
     def process_before_add(self, table_data, serial_info):
-        row = serial_info['row']
         cpr_start_cells = serial_info['cpr_start_cells']
-        row_cells = table_data['rows'][row]['cells']
         for cell_info in cpr_start_cells:
             code_info = cell_info['code_info']
             pre_cell_lst = code_info['pre_cells']
@@ -66,6 +64,7 @@ class CompressSerializer(SchemaSerializer):
             'process_add':True,
             'cpr_start_cells':cpr_start_cells
         }
+        return row_serial_info
 
     def update_serial_cell_info(self, col_data, col, cell_info):
         cell_text, cell_size = self.get_cell_text(cell_info)
@@ -80,7 +79,7 @@ class CompressSerializer(SchemaSerializer):
             cell_info = row_cells[col] 
             self.update_serial_cell_info(coldata, col, cell_info)
             row_serial_cell_lst.append(cell_info)
-            self.update_related_cell(cell_info, row)
+            self.update_related_cell(cell_info)
        
         boundary_cell = row_serial_cell_lst[-1]
         boundary_cell['serial_text'] = boundary_cell['serial_text'].rstrip()[:-1] + ' ' + self.tokenizer.sep_token + ' '
@@ -92,7 +91,7 @@ class CompressSerializer(SchemaSerializer):
             return text, cell_info['size'], False
         return self.cell_code_book.get_code(cell_info)
         
-    def update_related_cell(self, cell_info, row):
+    def update_related_cell(self, cell_info):
         code_info = cell_info.get('code_info', None)
         if code_info is not None:
             serial_text = cell_info['serial_text']
