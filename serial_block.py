@@ -17,7 +17,7 @@ class BlockSerializer(TableSerializer):
         cell_info['serial_size'] = col_info['size'] + 1 + cell_info['size'] + 1
         
         serial_cell_lst = [cell_info]
-        return serial_cell_lst
+        return [serial_cell_lst, None]
 
     def get_schema_text(self, table_data):
         title = table_data['documentTitle'] + ' ' + self.tokenizer.sep_token
@@ -25,9 +25,9 @@ class BlockSerializer(TableSerializer):
 
 
     def serialize_row_col(self, table_data, row, col):
-        serial_cell_lst = self.get_serial_text(table_data, row, col)
+        row_serial_info = self.get_serial_text(table_data, row, col)
         col_group_lst = [[col]]
-        fit_ok, serial_info = self.serial_window.can_add(table_data, row, col_group_lst, serial_cell_lst)
+        fit_ok, serial_info = self.serial_window.can_add(table_data, row, col_group_lst, row_serial_info)
         if fit_ok:
             self.serial_window.add(table_data, serial_info)
         else:

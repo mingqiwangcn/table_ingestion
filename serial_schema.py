@@ -14,20 +14,27 @@ class SchemaSerializer(TableSerializer):
         cell_serial_size = cell_info['size'] + 1
         return cell_serial_text, cell_serial_size
 
-    def get_serial_text(self, table_data, row, block_cols):
+    def get_row_serial_info(self, table_data, row, block_cols):
         col_data = table_data['columns']
         row_cells = table_data['rows'][row]['cells']
         row_serial_cell_lst = []
         for col in block_cols:
             cell_info = row_cells[col] 
             cell_serial_text, cell_serial_size = self.get_cell_serial_text(col_data, col, cell_info)
-            cell_info['serial_text'] = cell_serial_text
-            cell_info['serial_size'] = cell_serial_size
+            cell_info['serial_text'] = cell_serial_text + ' ; '
+            cell_info['serial_size'] = cell_serial_size + 1
             row_serial_cell_lst.append(cell_info)
-
         boundary_cell = row_serial_cell_lst[-1]
         boundary_cell['serial_text'] = boundary_cell['serial_text'].rstrip()[:-1] + ' ' + self.tokenizer.sep_token + ' '
-        return row_serial_cell_lst
+        # row size includes seperator
+        row_size = sum([a['serial_size'] for a in row_serial_cell_lst])
+        row_serial_info = {
+            'row':row,
+            'col':block_cols,
+            'cell_lst':row_serial_cell_lst,
+            'content_size':row_size,
+        }
+        return row_serial_info
     
     def get_schema_column_text(self, col_name):
         serial_text = col_name + ' | '  
@@ -73,17 +80,17 @@ class SchemaSerializer(TableSerializer):
         for schema_block in schema_block_lst:
             yield from self.serialize_schema_block(table_data, schema_block) 
   
-    def get_window_schema_text(self, table_data, schema_block):
-        schema_text = table_data['documentTitle'] + ' ' + self.tokenizer.sep_token + ' ' + schema_block['text'] + ' '
-        return schema_text
+    def get_title(self, table_data, schema_block):
+        title = table_data['documentTitle'] + ' ' + self.tokenizer.sep_token + ' ' + schema_block['text'] + ' '
+        return title
 
     def preprocess_schema_block(self, table_data, schema_block):
         return
 
     def serialize_schema_block(self, table_data, schema_block):
         self.preprocess_schema_block(table_data, schema_block)
-        schema_text = self.get_window_schema_text(table_data, schema_block)
-        self.serial_window.set_schema_text(schema_text)
+        schema_text = self.get_title(table_data, schema_block)
+        self.serial_window.set_title(schema_text)
         yield from self.get_wnd_block(table_data, schema_block)
 
     def get_serial_rows(self, table_data, schema_block):
@@ -92,9 +99,15 @@ class SchemaSerializer(TableSerializer):
             yield row
     
     def try_serialize_row(self, table_data, row, block_cols, col_group_lst):
-        row_serial_cell_lst = self.get_serial_text(table_data, row, block_cols)
-        status = self.serial_window.can_add(table_data, row, col_group_lst, row_serial_cell_lst)
-        return status  
+        row_serial_info = self.get_row_serial_info(table_data, row, block_cols)
+        f_ok = self.serial_window.can_add(table_data, row, col_group_lst, row_serial_info)
+        return f_ok, row_serial_info
+
+    def process_after_fail_to_add(self, table_data, serial_info):
+        return
+
+    def process_before_add(self, table_data, serial_info):
+        return
 
     def get_wnd_block(self, table_data, schema_block):
         block_cols = schema_block['cols']
@@ -102,12 +115,18 @@ class SchemaSerializer(TableSerializer):
         for row in self.get_serial_rows(table_data, schema_block): 
             fit_ok, serial_info = self.try_serialize_row(table_data, row, block_cols, col_group_lst)
             if fit_ok:
+                if serial_info.get('process_add', False):
+                    self.process_before_add(table_data, serial_info)
                 self.serial_window.add(table_data, serial_info)
             else:
+                if serial_info.get('process_add', False)::
+                    self.process_after_fail_to_add(table_data, serial_info)
                 serial_block = self.serial_window.pop(table_data)
                 yield serial_block
                 fit_ok, serial_info = self.try_serialize_row(table_data, row, block_cols, col_group_lst)
                 assert(fit_ok)
+                if serial_info.get('process_add', False):
+                    self.process_before_add(table_data, serial_info)
                 self.serial_window.add(table_data, serial_info)
 
         if self.serial_window.can_pop():

@@ -7,7 +7,7 @@ from code_book import CodeBook
 class CompressSerializer(SchemaSerializer):
     def __init__(self):
         super().__init__()
-        self.serial_window.set_cell_code_book(CodeBook(self.tokenizer))
+        self.cell_code_book = CodeBook(self.tokenizer)
 
     def get_serial_rows(self, table_data, schema_block):
         sorted_bin_lst = schema_block['sorted_bins']
@@ -27,43 +27,80 @@ class CompressSerializer(SchemaSerializer):
         for row in other_row_lst:
             yield row
 
-    def get_serial_text(self, table_data, row, block_cols):
+    def process_after_fail_to_add(self, table_data, serial_info):    
+        return
+
+    def process_before_add(self, table_data, serial_info):
+        row = serial_info['row']
+        cpr_start_cells = serial_info['cpr_start_cells']
+        row_cells = table_data['rows'][row]['cells']
+        for cell_info in cpr_start_cells:
+            code_info = cell_info['code_info']
+            pre_cell_lst = code_info['pre_cells']
+            for pre_cell in pre_cell_lst:
+                pre_cell['serial_text'] = pre_cell['updated_serial_text']
+                pre_cell['serial_size'] = pre_cell['updated_serial_size']
+            
+    def calc_row_size(self, table_data, row, block_cols, row_serial_cell_lst):
+        cpr_start_cells = [a for a in row_serial_cell_lst if a.get('code_info', None) is not None]
+        row_size = sum([a['serial_size'] for a in serial_cell_lst])
+        pre_size_chg = 0
+        code_refer_lst = []
+        code_refer_size = 0
+        for cell_info in cpr_start_cells:
+            code_info = cell_info['code_info']
+            code_refer_lst.append(code_info['code_refer'])    
+            code_refer_size += code_info['code_refer_size']
+            pre_cell_lst = code_info['pre_cells']
+            for pre_cell in pre_cell_lst:
+                pre_cell_size_chg = pre_cell['updated_serial_size'] - pre_cell['serial_size']       
+                pre_size_chg += pre_cell_size_chg
+
+        content_size = row_size + code_refer_size + pre_size_chg
+        row_serial_info = {
+            'row':row,
+            'cols':block_cols,
+            'code_refer_lst'code_refer_lst,
+            'cell_lst':row_serial_cell_lst,
+            'content_size': content_size,
+            'process_add':True,
+            'cpr_start_cells':cpr_start_cells
+        }
+
+    def update_serial_cell_info(self, col_data, col, cell_info):
+        cell_text, cell_size = self.get_cell_text(cell_info)
+        cell_info['serial_text'] = cell_text + ' ; '
+        cell_info['serial_size'] = cell_size + 1
+
+    def get_row_serial_info(self, table_data, row, block_cols):
         col_data = table_data['columns']
         row_cells = table_data['rows'][row]['cells']
-       
         row_serial_cell_lst = []
         for col in block_cols:
             cell_info = row_cells[col] 
-            cell_text, cell_size = self.get_cell_text(cell_info)
-            cell_serial_text = cell_text + ' | '
-            cell_serial_size = cell_size + 1 
-            cell_info['serial_text'] = cell_serial_text
-            cell_info['serial_size'] = cell_serial_size
+            self.update_serial_cell_info(coldata, col, cell_info)
             row_serial_cell_lst.append(cell_info)
             self.update_related_cell(cell_info, row)
        
         boundary_cell = row_serial_cell_lst[-1]
         boundary_cell['serial_text'] = boundary_cell['serial_text'].rstrip()[:-1] + ' ' + self.tokenizer.sep_token + ' '
-        return row_serial_cell_lst
-
+        return self.calc_row_size(table_data, row, block_cols, row_serial_cell_lst)
+        
     def get_cell_text(self, cell_info):
         text = cell_info['text']
         if cell_info['size'] < 2:
-            return text, cell_info['size']
-
-        code, code_size = self.serial_window.cell_code_book.get_code(cell_info)
-        return code, code_size
-
+            return text, cell_info['size'], False
+        return self.cell_code_book.get_code(cell_info)
+        
     def update_related_cell(self, cell_info, row):
-        compress_code = cell_info.get('compress_code', None) 
-        if compress_code is not None:
-            #print('compress_code row =', row)
+        code_info = cell_info.get('code_info', None)
+        if code_info is not None:
             serial_text = cell_info['serial_text']
             serial_size = cell_info['serial_size']
-            pre_cell_lst = cell_info['pre_cells']
+            pre_cell_lst = code_info['pre_cells']
             for pre_cell in pre_cell_lst:
                 pre_cell['updated_serial_text'] = serial_text
-                pre_cell['updated_serial_size'] =serial_size
+                pre_cell['updated_serial_size'] = serial_size
 
     def preprocess_schema_block(self, table_data, schema_block):
         col_data = table_data['columns']

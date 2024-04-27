@@ -4,10 +4,12 @@ class SchemaCodeBook:
         self.tokenizer = tokenizer
         self.reset()
 
-    def get_code(self, col_data, col, cell_info):
+    def get_code(self, col_data, col):
         col_key = col
         if col_key not in self.code_dict:
-            self.code_dict[col_key] = {'count':0, 'code':None, 'pre_cells':[]}
+            self.code_dict[col_key] = {'count':0, 'code':None,
+                                       'code_refer':None, 'code_refer_size':None, 
+                                       'pre_cells':[], 'cpr_start_cell':None}
         code_info = self.code_dict[col_key]
         code_info['count'] += 1
         
@@ -25,16 +27,16 @@ class SchemaCodeBook:
             if code not in self.special_token_dict:
                 self.special_token_dict[code] = True
             self.tokenizer.add_tokens([code], special_tokens=True)
-            self.code_dict[col_key]['code'] = code
-            compress_code = code + ' is ' + col_text + ' ' + self.tokenizer.sep_token + ' ' 
-            cell_info['compress_code'] = compress_code
-            cell_info['cpr_code_size'] = 1 + 1 + col_size + 1
-            cell_info['pre_cells'] = code_info['pre_cells']
-            return code, 1
+            code_info['code'] = code
+            code_refer = code + ' is ' + col_text + ' ' + self.tokenizer.sep_token + ' ' 
+            code_info['code_refer_size'] = 1 + 1 + text_size + 1
+            code_info['cpr_start_cell'] = cell_info
+            cell_info['schema_code_info'] = code_info
+            return code, 1, True
         else:
             pre_cell_lst = code_info['pre_cells']
             pre_cell_lst.append(cell_info)
-            return col_text, col_size
+            return text, text_size, False
 
     def reset(self):
         self.code_dict = {}
