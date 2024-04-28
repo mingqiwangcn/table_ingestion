@@ -37,7 +37,7 @@ class SchemaSerializer(TableSerializer):
         return row_serial_info
     
     def get_schema_column_text(self, col_name):
-        serial_text = col_name + ' | '  
+        serial_text = col_name + ' ; '  
         return serial_text
 
     def split_columns(self, table_data):

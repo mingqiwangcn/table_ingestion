@@ -51,22 +51,35 @@ def truncate_table(tokenizer, text_lst, max_size):
     token_size_lst = batch_encoding['length']
     
     out_text_lst = text_lst
+    out_token_size_lst = token_size_lst
     decode_offset_lst = [offset for offset, size in enumerate(token_size_lst) if size == max_size]
     if len(decode_offset_lst) > 0: 
         decode_input_lst =[input_id_lst[offset] for offset in decode_offset_lst] 
         decode_text_lst = tokenizer.batch_decode(decode_input_lst)
+        decode_size_lst = tokenizer(decode_text_lst,
+                                    truncation=False,
+                                    add_special_tokens=False,
+                                    return_token_type_ids=False,
+                                    return_attention_mask=False,
+                                    return_length=True)['length']
+
         out_text_lst = []
+        out_token_size_lst = []
         offset_map = {}
         for pos, offset in enumerate(decode_offset_lst):
             offset_map[offset] = pos
         for offset, _ in enumerate(text_lst):
             if offset not in offset_map:
                 out_text_lst.append(text_lst[offset])
+                out_token_size_lst.append(token_size_lst[offset])
             else:
                 decode_pos = offset_map[offset]
-                out_text_lst.append(decode_text_lst[decode_pos])
+                update_text = decode_text_lst[decode_pos]
+                out_text_lst.append(update_text)
+                update_size = decode_size_lst[decode_pos]
+                out_token_size_lst.append(update_size)
 
-    return out_text_lst, token_size_lst
+    return out_text_lst, out_token_size_lst
 
 def preprocess_schema(tokenizer, table_data):
     title_key = 'documentTitle'
