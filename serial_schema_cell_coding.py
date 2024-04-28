@@ -39,6 +39,10 @@ class SchemaCellCodingSerializer(CompressSerializer):
             pre_cell_lst = code_info['pre_cells']
             for pre_cell in pre_cell_lst:
                 pre_cell['schema'] = pre_cell['updated_schema']
+
+        cell_lst = serial_info['cell_lst']
+        for cell_info in cell_lst:
+            cell_info['serial_text'] = cell_info['schema'][0] + ' : ' + cell_info['serial_text']
                 
     def calc_row_size(self, table_data, row, block_cols, row_serial_cell_lst):
         row_serial_info = super().calc_row_size(table_data, row, block_cols, row_serial_cell_lst)
@@ -46,8 +50,10 @@ class SchemaCellCodingSerializer(CompressSerializer):
         pre_size_chg = 0
         code_refer_lst = []
         code_refer_size = 0
+        schema_size = 0
         for cell_info in cpr_start_cells:
             code_info = cell_info['schema_code_info']
+            schema_size += code_info['schema'][1] + 1
             code_refer_lst.append(code_info['code_refer'])    
             code_refer_size += code_info['code_refer_size']
             pre_cell_lst = code_info['pre_cells']
@@ -56,6 +62,6 @@ class SchemaCellCodingSerializer(CompressSerializer):
                 pre_size_chg += pre_cell_size_chg
          
          row_serial_info['code_refer_lst'] = code_refer_lst + row_serial_info['code_refer_lst']
-         row_serial_info['content_size'] += pre_size_chg
+         row_serial_info['content_size'] += schema_size + pre_size_chg
          row_serial_info['schema_cpr_start_cells'] = cpr_start_cells
          
