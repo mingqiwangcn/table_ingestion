@@ -31,8 +31,10 @@ class SchemaCellCodingSerializer(CompressSerializer):
         schema_code, schema_size = self.get_schema_info(col_data, col)
         cell_info['schema'] = (schema_code, schema_size) 
 
-    def process_before_add(self, table_data, serial_info):
+    def process_after_fit(self, table_data, serial_info):
         super().process_before_add(table_data, serial_info)
+        special_token_lst = list(self.schema_code_book.special_token_dict.keys())
+        self.serial_window.add_special_tokens(special_token_lst)
         cpr_start_cells = serial_info['schema_cpr_start_cells']
         for cell_info in cpr_start_cells:
             code_info = cell_info['schema_code_info']
@@ -43,25 +45,24 @@ class SchemaCellCodingSerializer(CompressSerializer):
         cell_lst = serial_info['cell_lst']
         for cell_info in cell_lst:
             cell_info['serial_text'] = cell_info['schema'][0] + ' : ' + cell_info['serial_text']
-                
-    def calc_row_size(self, table_data, row, block_cols, row_serial_cell_lst):
-        row_serial_info = super().calc_row_size(table_data, row, block_cols, row_serial_cell_lst)
+            cell_info['serial_size'] = cell_info['schema'][1] + 1 + cell_info['serial_size']
+        
+    def calc_row_info(self, table_data, row, block_cols, row_serial_cell_lst):
+        row_serial_info = super().calc_row_info(table_data, row, block_cols, row_serial_cell_lst)
         cpr_start_cells = [a for a in row_serial_cell_lst if a.get('schema_code_info', None) is not None]
-        pre_size_chg = 0
-        code_refer_lst = []
-        code_refer_size = 0
-        schema_size = 0
+
+        code_info_lst = []
+        pre_cells_to_update = []
         for cell_info in cpr_start_cells:
             code_info = cell_info['schema_code_info']
-            schema_size += code_info['schema'][1] + 1
-            code_refer_lst.append(code_info['code_refer'])    
-            code_refer_size += code_info['code_refer_size']
+            code_info_lst.append(code_info)
             pre_cell_lst = code_info['pre_cells']
-            for pre_cell in pre_cell_lst:
-                pre_cell_size_chg = pre_cell['updated_schema'][1] - pre_cell['schema'][1]       
-                pre_size_chg += pre_cell_size_chg
-         
-         row_serial_info['code_refer_lst'] = code_refer_lst + row_serial_info['code_refer_lst']
-         row_serial_info['content_size'] += schema_size + pre_size_chg
+            pre_cells_to_update.extend(pre_cell_lst)
+
+         row_serial_info['schema_code_info_lst'] = code_info_lst
+         row_serial_info['schema_pre_cells_to_update'] = pre_cells_to_update
          row_serial_info['schema_cpr_start_cells'] = cpr_start_cells
-         
+
+    def clear_code_book(self):
+        super().clear_code_book()
+        self.schema_code_book.reset()

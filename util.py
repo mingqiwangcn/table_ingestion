@@ -35,7 +35,7 @@ def get_hash_key(text):
     return key
 
 def get_token_size(tokenizer, text):
-    return len(tokenizer.tokenize(text))
+    return len(tokenizer.encode(text, add_special_tokens=False))
 
 def truncate_table(tokenizer, text_lst, max_size):
     batch_encoding = tokenizer(text_lst,

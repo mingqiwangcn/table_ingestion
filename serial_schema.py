@@ -10,7 +10,7 @@ class SchemaSerializer(TableSerializer):
 
     def get_cell_serial_text(self, col_data, col, cell_info):
         cell_text = cell_info['text']
-        cell_serial_text = cell_text + ' | '
+        cell_serial_text = cell_text + ' ; '
         cell_serial_size = cell_info['size'] + 1
         return cell_serial_text, cell_serial_size
 
@@ -103,11 +103,16 @@ class SchemaSerializer(TableSerializer):
         f_ok = self.serial_window.can_add(table_data, row, col_group_lst, row_serial_info)
         return f_ok, row_serial_info
 
-    def process_after_fail_to_add(self, table_data, serial_info):
+    def process_after_fit(self, table_data, serial_info):
         return
 
-    def process_before_add(self, table_data, serial_info):
+    def clear_code_book(self):
         return
+
+    def pop_window(self, table_data):
+        serial_block = self.serial_window.pop(table_data)
+        self.clear_code_book()
+        return serial_block
 
     def get_wnd_block(self, table_data, schema_block):
         block_cols = schema_block['cols']
@@ -116,20 +121,18 @@ class SchemaSerializer(TableSerializer):
             fit_ok, serial_info = self.try_serialize_row(table_data, row, block_cols, col_group_lst)
             if fit_ok:
                 if serial_info.get('process_add', False):
-                    self.process_before_add(table_data, serial_info)
+                    self.process_after_fit(table_data, serial_info)
                 self.serial_window.add(table_data, serial_info)
             else:
-                if serial_info.get('process_add', False)::
-                    self.process_after_fail_to_add(table_data, serial_info)
-                serial_block = self.serial_window.pop(table_data)
+                serial_block = self.pop_window(table_data)
                 yield serial_block
                 fit_ok, serial_info = self.try_serialize_row(table_data, row, block_cols, col_group_lst)
                 assert(fit_ok)
                 if serial_info.get('process_add', False):
-                    self.process_before_add(table_data, serial_info)
+                    self.process_after_fit(table_data, serial_info)
                 self.serial_window.add(table_data, serial_info)
 
         if self.serial_window.can_pop():
-            serial_block = self.serial_window.pop(table_data)
+            serial_block = self.pop_window(table_data)
             yield serial_block
             

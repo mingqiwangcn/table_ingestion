@@ -10,7 +10,7 @@ class CodeBook:
     # we must have yx > y + x + 3, so x > (y+3) / (y-1) = 1 + ( 4 / (y-1) ), 
     # which is the condition to start compression. We must tract those cells before the condition is stisfied, so that
     # we can update them with codes
-    def get_code(self, cell_info, text_key='text', size_key='size'):
+    def get_code(self, row, col, cell_info, text_key='text', size_key='size'):
         text = cell_info[text_key]
         key = util.get_hash_key(text)
         if key not in self.code_dict:
@@ -28,8 +28,9 @@ class CodeBook:
         if code is not None:
             return code, 1
 
-        if y > 1 and ( x > 1 + ( 4 / (y - 1) ) ): 
-            code = '[E' + str(len(self.code_dict)+1) + ']'
+        if y > 1 and ( x > 1 + ( 4 / (y - 1) ) ):
+            self.code_number += 1
+            code = '[E' + str(self.code_number) + ']'
             if code not in self.special_token_dict:
                 self.special_token_dict[code] = True
             self.tokenizer.add_tokens([code], special_tokens=True)
@@ -42,10 +43,13 @@ class CodeBook:
             return code, 1
         else:
             pre_cell_lst = code_info['pre_cells']
+            cell_info['row'] = row
+            cell_info['col'] = col
             pre_cell_lst.append(cell_info)
             return text, text_size
 
     def reset(self):
+        self.code_number = 0
         self.code_dict = {}
         self.code_text = ''
         self.code_size = 0

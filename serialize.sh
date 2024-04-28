@@ -5,4 +5,4 @@ fi
 python serialize.py \
    --dataset $1 \
    --strategy $2 \
-   --debug 0
+   --debug 1
