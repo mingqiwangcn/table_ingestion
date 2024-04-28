@@ -27,12 +27,14 @@ class CompressSerializer(SchemaSerializer):
         for row in other_row_lst:
             yield row
 
+    def process_before_pop(self):
+        special_token_lst = list(self.cell_code_book.special_token_dict.keys())
+        self.serial_window.add_special_tokens(special_token_lst)
+
     def clear_code_book(self):
         self.cell_code_book.reset()
    
     def process_after_fit(self, table_data, serial_info):
-        special_token_lst = list(self.cell_code_book.special_token_dict.keys())
-        self.serial_window.add_special_tokens(special_token_lst)
         cpr_start_cells = serial_info['cpr_start_cells']
         for cell_info in cpr_start_cells:
             code_info = cell_info['code_info']

@@ -109,7 +109,11 @@ class SchemaSerializer(TableSerializer):
     def clear_code_book(self):
         return
 
+    def process_before_pop(self):
+        return
+
     def pop_window(self, table_data):
+        self.process_before_pop()
         serial_block = self.serial_window.pop(table_data)
         self.clear_code_book()
         return serial_block

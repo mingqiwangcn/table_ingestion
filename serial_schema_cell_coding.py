@@ -63,6 +63,10 @@ class SchemaCellCodingSerializer(CompressSerializer):
          row_serial_info['schema_pre_cells_to_update'] = pre_cells_to_update
          row_serial_info['schema_cpr_start_cells'] = cpr_start_cells
 
+    def process_before_pop(self):
+        special_token_lst = list(self.schema_code_book.special_token_dict.keys())
+        self.serial_window.add_special_tokens(special_token_lst)
+
     def clear_code_book(self):
         super().clear_code_book()
         self.schema_code_book.reset()
