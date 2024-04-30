@@ -34,6 +34,16 @@ class CompressSerializer(SchemaSerializer):
     def clear_code_book(self):
         self.cell_code_book.reset()
    
+    def process_after_not_fit(self, table_data, serial_info):
+        cpr_start_cells = serial_info['cpr_start_cells']
+        for cell_info in cpr_start_cells:
+            code_info = cell_info['code_info']
+            pre_cell_lst = code_info['pre_cells']
+            for pre_cell in pre_cell_lst:
+                del pre_cell['updated_serial_text']
+                del pre_cell['updated_serial_size']
+            del cell_info['code_info']
+
     def process_after_fit(self, table_data, serial_info):
         cpr_start_cells = serial_info['cpr_start_cells']
         for cell_info in cpr_start_cells:

@@ -103,6 +103,9 @@ class SchemaSerializer(TableSerializer):
         f_ok = self.serial_window.can_add(table_data, row, col_group_lst, row_serial_info)
         return f_ok, row_serial_info
 
+    def process_after_not_fit(self, table_data, serial_info):
+        return
+
     def process_after_fit(self, table_data, serial_info):
         return
 
@@ -128,6 +131,8 @@ class SchemaSerializer(TableSerializer):
                     self.process_after_fit(table_data, serial_info)
                 self.serial_window.add(table_data, serial_info)
             else:
+                if serial_info.get('process_add', False):
+                    self.process_after_not_fit(table_data, serial_info)
                 serial_block = self.pop_window(table_data)
                 yield serial_block
                 fit_ok, serial_info = self.try_serialize_row(table_data, row, block_cols, col_group_lst)
