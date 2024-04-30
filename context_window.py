@@ -36,9 +36,10 @@ class ContextWindow:
         for serial_info in self.content_buffer:
             cell_lst = serial_info['cell_lst']
             cell_text_lst.extend([a['serial_text'] for a in cell_lst])
-            code_info_lst = serial_info['code_info_lst']
-            code_refer_lst = [a['code_refer'] for a in code_info_lst]
-            refer_text_lst.extend(code_refer_lst)
+            code_info_lst = serial_info.get('code_info_lst', None)
+            if code_info_lst:
+                code_refer_lst = [a['code_refer'] for a in code_info_lst]
+                refer_text_lst.extend(code_refer_lst)
 
         refer_text = ''.join(refer_text_lst)
         cell_text = ''.join(cell_text_lst)

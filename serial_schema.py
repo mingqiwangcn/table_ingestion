@@ -30,7 +30,7 @@ class SchemaSerializer(TableSerializer):
         row_size = sum([a['serial_size'] for a in row_serial_cell_lst])
         row_serial_info = {
             'row':row,
-            'col':block_cols,
+            'cols':block_cols,
             'cell_lst':row_serial_cell_lst,
             'content_size':row_size,
         }
