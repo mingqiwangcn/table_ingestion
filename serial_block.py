@@ -17,17 +17,25 @@ class BlockSerializer(TableSerializer):
         cell_info['serial_size'] = col_info['size'] + 1 + cell_info['size'] + 1
         
         serial_cell_lst = [cell_info]
-        return [serial_cell_lst, None]
+        content_size = cell_info['serial_size']
+        serial_info = {
+            'row':row,
+            'cols':[col],
+            'cell_lst':serial_cell_lst,
+            'content_size':content_size
+        }
 
-    def get_schema_text(self, table_data):
+        return serial_info
+
+    def get_title(self, table_data):
         title = table_data['documentTitle'] + ' ' + self.tokenizer.sep_token
         return title 
 
 
     def serialize_row_col(self, table_data, row, col):
-        row_serial_info = self.get_serial_text(table_data, row, col)
+        serial_info = self.get_serial_text(table_data, row, col)
         col_group_lst = [[col]]
-        fit_ok, serial_info = self.serial_window.can_add(table_data, row, col_group_lst, row_serial_info)
+        fit_ok = self.serial_window.can_add(table_data, row, col_group_lst, serial_info)
         if fit_ok:
             self.serial_window.add(table_data, serial_info)
         else:
@@ -36,8 +44,8 @@ class BlockSerializer(TableSerializer):
             self.serial_window.add(table_data, serial_info)
 
     def do_serialize(self, table_data):
-        schema_text = self.get_schema_text(table_data)
-        self.serial_window.set_schema_text(schema_text)
+        schema_text = self.get_title(table_data)
+        self.serial_window.set_title(schema_text)
         serial_row_col = table_data.get('serial_row_col', None)
         if serial_row_col is None:
             row_data = table_data['rows']

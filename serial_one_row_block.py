@@ -8,8 +8,8 @@ class OneRowBlockSerializer(BlockSerializer):
         super().__init__()
 
     def do_serialize(self, table_data):
-        schema_text = self.get_schema_text(table_data)
-        self.serial_window.set_schema_text(schema_text)
+        title = self.get_title(table_data)
+        self.serial_window.set_title(title)
         serial_row_col = table_data.get('serial_row_col', None)
         if serial_row_col is None:
             row_data = table_data['rows']
