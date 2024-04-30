@@ -43,21 +43,26 @@ class SchemaSerializer(TableSerializer):
     def split_columns(self, table_data):
         col_data = table_data['columns']
         block_lst = []
-        Schema_Max_Size = int(self.serial_window.wnd_size * util.Max_Header_Meta_Ratio)
-        
-        schema_item_lst = []
-        for col, col_info in enumerate(col_data):
+        block_cols = []
+        block_text = ''
+        block_size = 0
+        max_size = int(self.serial_window.wnd_size * util.Max_Header_Meta_Ratio)
+        for offset, col_info in enumerate(col_data):
             col_name = col_info['text'] 
             serial_text = self.get_schema_column_text(col_name) 
             serial_size = util.get_token_size(self.tokenizer, serial_text)
-            schema_item = [col, serial_size, serial_text]
-            schema_item_lst.append(schema_item)
-        bin_lst = bin_pack(schema_item_lst, Schema_Max_Size) 
-        
-        for bin_entry in bin_lst:
-            block_cols = [a[0] for a in bin_entry.item_lst]
-            block_text = ''.join([a[2] for a in bin_entry.item_lst])
-            block_size = sum([a[1] for a in bin_entry.item_lst])
+            if block_size + serial_size <= max_size:
+                block_cols.append(offset)
+                block_text += ' ' + serial_text
+                block_size += serial_size
+            else:
+                block_info = self.get_block_info(block_cols, block_text, block_size)
+                block_lst.append(block_info)
+                block_cols = [offset]
+                block_text = serial_text
+                block_size = serial_size
+
+        if block_size > 0:
             block_info = self.get_block_info(block_cols, block_text, block_size)
             block_lst.append(block_info)
         return block_lst
