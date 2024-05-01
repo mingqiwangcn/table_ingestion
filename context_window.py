@@ -31,17 +31,22 @@ class ContextWindow:
         return len(self.content_buffer) > 0
 
     def get_out_text(self):
+        schema_refer_text_lst = []
         refer_text_lst = []
         cell_text_lst = []
         for serial_info in self.content_buffer:
             cell_lst = serial_info['cell_lst']
-            cell_text_lst.extend([a['serial_text'] for a in cell_lst])
+            cell_text_lst.extend([a['serial_text'] if a.get('schema', None) is None else a['schema'][0] + ' : ' + a['serial_text'] for a in cell_lst])
             code_info_lst = serial_info.get('code_info_lst', None)
             if code_info_lst:
                 code_refer_lst = [a['code_refer'] for a in code_info_lst]
                 refer_text_lst.extend(code_refer_lst)
+            schema_code_info_lst = serial_info.get('schema_code_info_lst', None)
+            if schema_code_info_lst:
+                code_refer_lst = [a['code_refer'] for a in schema_code_info_lst]
+                schema_refer_text_lst.extend(code_refer_lst)
 
-        refer_text = ''.join(refer_text_lst)
+        refer_text = ''.join(schema_refer_text_lst) +  ''.join(refer_text_lst)
         cell_text = ''.join(cell_text_lst)
         out_text = self.title + refer_text + cell_text
         return out_text
@@ -64,7 +69,6 @@ class ContextWindow:
         #out_size_re_calc = len(self.tokenizer.encode(out_text, add_special_tokens=False))
         #assert(out_size_re_calc == out_size)
         #assert(out_size <= self.wnd_size)
-        
         self.clear_content()
         return out_data
 
