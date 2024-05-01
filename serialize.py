@@ -7,6 +7,7 @@ from serial_schema import SchemaSerializer
 from serial_schema_coding import SchemaCodingSerializer
 from serial_compress import CompressSerializer
 from serial_agree_coding import AgreeCodingSerializer
+from serial_schema_cell_coding import SchemaCellCodingSerializer
 import multiprocessing
 from multiprocessing import Pool as ProcessPool
 import argparse
@@ -30,6 +31,8 @@ def init_worker(args):
         tsl = SchemaCodingSerializer()
     elif args.strategy == 'compress':
         tsl = CompressSerializer()
+    elif args.strategy == 'schema_cell_coding':
+        tsl = SchemaCellCodingSerializer()
     elif args.strategy == 'agree_coding':
         tsl = AgreeCodingSerializer()
     else:

@@ -94,8 +94,8 @@ class SchemaSerializer(TableSerializer):
 
     def serialize_schema_block(self, table_data, schema_block):
         self.preprocess_schema_block(table_data, schema_block)
-        schema_text = self.get_title(table_data, schema_block)
-        self.serial_window.set_title(schema_text)
+        title = self.get_title(table_data, schema_block)
+        self.serial_window.set_title(title)
         yield from self.get_wnd_block(table_data, schema_block)
 
     def get_serial_rows(self, table_data, schema_block):
