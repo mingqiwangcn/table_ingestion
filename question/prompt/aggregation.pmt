@@ -1,0 +1,11 @@
+You need to ask 4 questions given the following table with table caption and table data
+Instructions:
+1) For each question, generate SQL from the table first and then translate the SQL to natural language question
+2) Use 1 column in "select" clause
+3) Apply aggregation operator to the column in "select" clause if the column is numeric
+4) Use 1 predicates in "where" clause for question 1 and 2 and use 2 predicates for question 3 and 4
+5) Do not contain "from table" clause in SQL 
+6) Each output should be in the following format
+   No. {output number}
+   SQL: {SQL}
+   Question: {question}
