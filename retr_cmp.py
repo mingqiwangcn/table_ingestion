@@ -3,7 +3,7 @@ import os
 from tqdm import tqdm
 import pandas as pd
 
-CMP_Dataset = 'nyc_open_1000'
+CMP_Dataset = 'nyc_open_10K'
 CMP_Top_Num = 10
  
 def read_retr(retr_file):
@@ -63,7 +63,7 @@ def output_retr_data(retr_data, out_file):
     df.to_csv(out_file)
 
 def main():
-    strategy_lst = ['block', 'schema']
+    strategy_lst = ['1_row_block', 'schema_cell_coding']
     retr_dict = {}
     out_dir = f'./output/{CMP_Dataset}/cmp'
     if not os.path.isdir(out_dir):
@@ -79,7 +79,7 @@ def main():
             output_retr_data(retr_data, out_file)
         print(f'output {out_file}\n')
     
-    cmp_pairs = [('block', 'schema')]
+    cmp_pairs = [('1_row_block', 'schema_cell_coding')]
     for pair in cmp_pairs:
         retr_data_1 = retr_dict[pair[0]]
         retr_data_2 = retr_dict[pair[1]]

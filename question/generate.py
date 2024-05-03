@@ -4,22 +4,25 @@ from tqdm import tqdm
 import json
 from chatgpt_questions import ChatGptGenerator
 import pandas as pd
+import glob
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', type=str, required=True)
+    parser.add_argument('--dataset', type=str)
+    parser.add_argument('--strategy', type=str)
     args = parser.parse_args()
     return args
 
 def read_tables(args):
-    data_file = '../../data/%s/tables/tables.jsonl' % args.dataset
+    file_pattern = os.path.join(args.sample_dir, 'tables/*.jsonl')
+    table_file_lst = glob.glob(file_pattern)
     table_lst = []
-    with open(data_file) as f:
-        for line in f:
-            table_data = json.loads(line)
-            if len(table_data['rows']) == 0:
-                continue
-            yield table_data
+    for table_file in tqdm(table_file_lst):
+        with open(table_file) as f:
+            for line in f:
+                table_data = json.loads(line)
+                table_lst.append(table_data)
+    return table_lst
 
 def read_state(state_file):
     if not os.path.isfile(state_file):
@@ -34,41 +37,25 @@ def write_state(state_file, state):
 
 def main():
     args = get_args()
-    out_dir = f'./output/{args.dataset}'
+    out_dir = f'./output/{args.dataset}/{args.strategy}'
     if not os.path.isdir(out_dir):
         os.makedirs(out_dir)
+    work_dir = os.path.dirname(os.getcwd())
+    args.work_dir = work_dir
+    args.sample_dir = os.path.join(work_dir, 'output', args.dataset, args.strategy, 'samples')
     generator = ChatGptGenerator('./prompt')
-    table_seq_no = 0
-   
-    state_file = os.path.join(out_dir, 'state.json')
-    state = read_state(state_file)
-    if state is None:
-        state = {'seq_no':None, 'id':None}
-
-    start_seq_no = 1
-    if state['seq_no'] is not None:
-        start_seq_no = state['seq_no'] + 1
-        print(f'start from No.{start_seq_no}')
-
-    for table_data in read_tables(args):
-        table_seq_no += 1
-        if table_seq_no < start_seq_no:
-            continue
-        if len(table_data['columns']) < 2:
-            continue
-        table_sql_lst = generator.generate_questions(table_data)
-        if len(table_sql_lst) == 0:
-            continue
-        table_id = table_sql_lst[0]['meta']['table_id']
-        print(f'No.{table_seq_no} id={table_id}')
-        out_sql_info_file = os.path.join(out_dir, f'query_{table_seq_no}_{table_id}.jsonl')
-        with open(out_sql_info_file, 'w') as f_o_sql:
-            for sql_info in table_sql_lst:
-                f_o_sql.write(json.dumps(sql_info) + '\n')
-        state['seq_no'] = table_seq_no
-        state['id'] = table_id
-        write_state(state_file, state)
-
-
+    
+    table_lst = read_tables(args)
+    ou_question_file = os.path.join(out_dir, 'questions.jsonl')
+    with open(ou_question_file, 'w') as f_o:
+        for table_data in tqdm(table_lst, desc='generate questions'):
+            question_lst = generator.generate_questions(table_data)
+            for question in question_lst:
+                q_info = {
+                    'table_number':table_data['table_number'],
+                    'question':question
+                }
+                f_o.write(json.dumps(q_info) + '\n')
+    
 if __name__ == '__main__':
     main()

@@ -4,7 +4,7 @@ import random
 import tiktoken
 import numpy as np
 import glob
-from table_ingestion import util
+import util
 import gpt
 from openai import OpenAI
 import uuid
@@ -16,25 +16,25 @@ class SqlOP:
     between = 'between and'
 
 class ChatGptGenerator:
-    def __init__(self, prompt_file):
+    def __init__(self, prompt_dir):
         self.buffer = []
-        self.q_size_per_table = 20
-        self.prompt_method = 'sql'
+        self.q_size_per_table = 10
+        self.prompt_method = 'general'
         self.token_encoding = tiktoken.encoding_for_model(gpt.MODEL_NAME)
-        self.max_caption_size = util.Max_Title_Size 
-        self.max_col_size = util.Max_Col_Header_Size
-        self.max_cell_size = util.Max_Cell_Size
-        self.max_cols = 50
+        #self.max_caption_size = util.Max_Title_Size 
+        #self.max_col_size = util.Max_Col_Header_Size
+        #self.max_cell_size = util.Max_Cell_Size
+        #self.max_cols = 50
         output_size = 1000
         self.ctx_size = 4097 - output_size 
-        self.init_prompt(prompt_file)
+        self.init_prompt(prompt_dir)
         self.init_messages()
         #set API key
         api_key = os.getenv('OPENAI_API_KEY', None)
         if api_key is None:
             raise ValueError('Need to set environment variable OPENAI_API_KEY')
         self.client = OpenAI(api_key=api_key)
-        log_file = os.path.join(os.path.dirname(prompt_file), 'log.txt')
+        log_file = os.path.join(prompt_dir, 'log.txt')
         f_log = open(log_file, 'a')
         gpt.set_logger(f_log)
         self.sql_op_lst = [SqlOP.eq, SqlOP.greater, SqlOP.less, SqlOP.between]
@@ -51,7 +51,7 @@ class ChatGptGenerator:
         self.prompt_cell_tag = 'Table Data:'
         self.prompt_sql_tag = '\nSQLs:'
         self.prompt_col_row_tag = '\nColumns and Rows:'
-        self.prompt_sql_tag_size = len(self.token_encoding.encode(self.prompt_sql_tag))
+        #self.prompt_sql_tag_size = len(self.token_encoding.encode(self.prompt_sql_tag))
 
     def init_messages(self):
         self.messages = [
@@ -71,65 +71,16 @@ class ChatGptGenerator:
     
         num_tokens += 3  # every reply is primed with <|start|>assistant<|message|>
         self.num_meta_tokens = num_tokens
-
-    def truncate_text(self, text, max_tokens):
-        token_integers = self.token_encoding.encode(text)
-        tokens = token_integers[:max_tokens]
-        text = self.token_encoding.decode(tokens)
-        return text, len(tokens)
-
-    def process_caption(self, table_data):
-        if table_data.get('gpt_title', None) is not None:
-            return
-        caption, caption_size = self.truncate_text(table_data['documentTitle'], self.max_caption_size)
-        table_data['gpt_title'] = caption
-        table_data['gpt_title_size'] = caption_size
-
-    def truncate_columns(self, table_data):
-        col_data = table_data['columns']
-        if len(col_data) <= self.max_cols:
-            return
-        table_data['columns'] = col_data[:self.max_cols]
-        row_data = table_data['rows']
-        for row_item in row_data:
-            cell_data = row_item['cells']
-            row_item['cells'] = cell_data[:self.max_cols]
-
-    def process_col_header(self, table_data):
-        if table_data.get('gpt_total_col_size') is not None:
-            return
-        col_data = table_data['columns']
-        total_size = 0
-        for col_info in col_data:
-            col_name = col_info['text']
-            if '\t' in col_name:
-                col_name = col_name.replace('\t', ' ')
-            col_text, col_size = self.truncate_text(col_name, self.max_col_size)
-            col_info['gpt_text'] = col_text
-            col_info['gpt_size'] = col_size
-            total_size += col_size
-        table_data['gpt_total_col_size'] = total_size
-        
+       
     def get_col_header_prompt(self, table_data):
         col_data = table_data['columns']
-        gpt_text_lst = [a['gpt_text'] for a in col_data] 
-        header_prompt = '\t'.join(gpt_text_lst)
-        return header_prompt, table_data['gpt_total_col_size'] 
-   
-    def process_row_cells(self, table_data):
-        row_data = table_data['rows']
-        for row_item in row_data:
-            cell_lst = row_item['cells']
-            for cell_info in cell_lst:
-                item_text = cell_info['text']
-                if '\t' in item_text:
-                    item_text = item_text.replace('\t', ' ')
-                gpt_text, gpt_size = self.truncate_text(item_text, self.max_cell_size)
-                cell_info['gpt_text'] = gpt_text
-         
+        text_lst = [a['text'] for a in col_data] 
+        header_prompt = '\t'.join(text_lst)
+        return header_prompt 
+            
     def col_data_complete(self, row_item, col_lst):
         for col in col_lst:
-            cell_text = row_item['cells'][col]['gpt_text'] 
+            cell_text = row_item['cells'][col]['text'] 
             if cell_text == '':
                 return False
         return True
@@ -154,9 +105,9 @@ class ChatGptGenerator:
             num_col_sample = random.sample(num_sql_col_lst, 1)[0]
             col_samples = random.sample(col_lst, num_col_sample)            
             sel_col = col_samples[0]
-            sel_col_name = col_data[sel_col]['gpt_text']
+            sel_col_name = col_data[sel_col]['text']
             where_cols = col_samples[1:]
-            where_col_names = [col_data[a]['gpt_text'] for a in where_cols]            
+            where_col_names = [col_data[a]['text'] for a in where_cols]            
             row = random.sample(row_lst, 1)[0]
             row_item = row_data[row]
             if not self.col_data_complete(row_item, where_cols):
@@ -172,7 +123,7 @@ class ChatGptGenerator:
             where_part_sql = ''
             for offset, w_col in enumerate(where_cols):
                 w_col_name = where_col_names[offset]
-                col_cell_text = row_item['cells'][w_col]['gpt_text']
+                col_cell_text = row_item['cells'][w_col]['text']
                 col_type = col_data[w_col].get('infer_type', None)
                 where_part_sql += self.get_where_sql(w_col_name, col_type, col_cell_text) 
                 if offset < (len(where_cols) - 1):
@@ -180,6 +131,7 @@ class ChatGptGenerator:
             sql = select_part_sql + ' where ' + where_part_sql
             meta = {
                 'table_id':table_data['tableId'],
+                'table_number':table_data['table_number'],
                 'title':table_data['documentTitle'],
                 'row':row,
                 'sel_col':sel_col,
@@ -218,7 +170,7 @@ class ChatGptGenerator:
             where_sql = f"{col_name} = '{cell_text}'"
         return where_sql
     
-    def sql_lst_prompts(self, prompt, table_data, num_tokens):
+    def sql_lst_prompts(self, prompt, table_data):
         sql_info_lst = self.sample_sql(table_data, sample_size=self.q_size_per_table) 
         prompt_sql_info_lst = [] 
         row_data = table_data['rows']
@@ -227,22 +179,16 @@ class ChatGptGenerator:
             sample_row_idx = sql_info['meta']['row'] 
             sample_row_item = row_data[sample_row_idx]
             cell_lst = sample_row_item['cells'] 
-            row_prompt = '\t'.join([a['gpt_text'] for a in cell_lst])
+            row_prompt = '\t'.join([a['text'] for a in cell_lst])
             
             #also need to consider the SQL following
             sql_text = sql_info['sql']
-            sql_prompt = f'\n{sql_no}. {sql_text}' 
-            sql_size = len(self.token_encoding.encode(sql_prompt))
+            sql_prompt = f'\n{sql_no} {sql_text}' 
             
-            row_size = len(self.token_encoding.encode(row_prompt)) + sql_size
-            
-            if num_tokens + row_size + self.prompt_sql_tag_size  <= self.ctx_size:
-                prompt += f'\n{sql_no}\t' + row_prompt
-                num_tokens += row_size
-                sql_info['prompt'] = sql_prompt
-                prompt_sql_info_lst.append(sql_info)
-            else:
-                break
+            prompt += f'\n{sql_no}\t' + row_prompt
+            sql_info['prompt'] = sql_prompt
+            prompt_sql_info_lst.append(sql_info)
+        
         return prompt, prompt_sql_info_lst
     
     def cell_lst_prompts(self, prompt, table_data, num_tokens):
@@ -281,53 +227,44 @@ class ChatGptGenerator:
                 sample_col_row_lst.append(col_row_info)
         return prompt, sample_col_row_lst 
 
-    def get_table_prompt(self, prompt, table_data):
-        self.truncate_columns(table_data)
+    def get_table_prompt(self, start_prompt, table_data):
+        prompt = start_prompt
         #Add table caption
-        self.process_caption(table_data)
-        prompt += '\n' + self.prompt_caption_tag + '\n' + table_data['gpt_title']
+        prompt += '\n' + self.prompt_caption_tag + '\n' + table_data['documentTitle']
         #Add cell data tag
-        prompt += '\n' + self.prompt_cell_tag 
+        prompt += '\n' + self.prompt_cell_tag
         #Add col headers
-        self.process_col_header(table_data)
-        header_prompt, header_prompt_size = self.get_col_header_prompt(table_data)
-        prompt += '\n' + 'row ' + header_prompt
-        num_tokens = self.num_meta_tokens + len(self.token_encoding.encode(prompt))
-        assert num_tokens < self.ctx_size
-        #Add row data
-        self.process_row_cells(table_data)
+        header_prompt = self.get_col_header_prompt(table_data)
+        prompt += '\n' + header_prompt
         util.infer_col_type(table_data)
-
-        if self.prompt_method == 'general':
-            prompt, prompt_lst = self.sql_lst_prompts(prompt, table_data, num_tokens)
-            prompt += self.prompt_sql_tag
-        else: 
-            prompt, prompt_lst = self.cell_lst_prompts(prompt, table_data, num_tokens)
-            prompt += self.prompt_col_row_tag
+        #if self.prompt_method == 'general':
+        prompt, prompt_lst = self.sql_lst_prompts(prompt, table_data)
+        prompt += self.prompt_sql_tag
+        #else: 
+            #prompt, prompt_lst = self.cell_lst_prompts(prompt, table_data, num_tokens)
+            #prompt += self.prompt_col_row_tag
 
         for sample_prompt in prompt_lst:
             prompt += sample_prompt['prompt']
         return prompt, prompt_lst
     
     def generate_questions(self, table_data):
-        prompt_name = self.start_prompt_lst[0]
-        table_prompt, info_lst = self.get_table_prompt(prompt_name, table_data)
+        statr_prompt = self.start_prompt_lst[0]
+        table_prompt, info_lst = self.get_table_prompt(statr_prompt, table_data)
         self.messages[-1]['content'] = table_prompt
-        response = gpt.chat_complete(self.client, self.messages) 
-        table_prompt_lst = []
+        response = gpt.chat_complete(self.client, self.messages)
+        import pdb; pdb.set_trace()
+        question_lst = []
         out_text_lst = response.split('\n')
         for line in out_text_lst:
-            offset = line.find(' | ')
+            offset = line.find('&@')
             if offset < 0:
                 continue
             q_no_str = (line[:offset].strip())
             if not util.is_int(q_no_str):
                 continue
-            q_no = int(q_no_str)
-            sql_info = info_lst[q_no - 1]
             question = line[offset:].strip()
             assert question[0] == '|'
             question = question[1:].strip()
-            sql_info['question'] = question
-            table_prompt_lst.append(sql_info)
-        return table_prompt_lst
+            question_lst.append(question)
+        return question_lst
