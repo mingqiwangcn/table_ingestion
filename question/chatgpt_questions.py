@@ -103,7 +103,7 @@ class ChatGptGenerator:
                 break
             num_try += 1
             num_col_sample = random.sample(num_sql_col_lst, 1)[0]
-            col_samples = random.sample(col_lst, num_col_sample)            
+            col_samples = random.sample(col_lst, min(num_col_sample, len(col_lst)))            
             sel_col = col_samples[0]
             sel_col_name = col_data[sel_col]['text']
             where_cols = col_samples[1:]
@@ -253,18 +253,14 @@ class ChatGptGenerator:
         table_prompt, info_lst = self.get_table_prompt(statr_prompt, table_data)
         self.messages[-1]['content'] = table_prompt
         response = gpt.chat_complete(self.client, self.messages)
-        import pdb; pdb.set_trace()
         question_lst = []
         out_text_lst = response.split('\n')
+        tag = 'Question Text:'
         for line in out_text_lst:
-            offset = line.find('&@')
+            offset = line.find(tag)
             if offset < 0:
                 continue
-            q_no_str = (line[:offset].strip())
-            if not util.is_int(q_no_str):
-                continue
-            question = line[offset:].strip()
-            assert question[0] == '|'
-            question = question[1:].strip()
+            pos = offset + len(tag)
+            question = line[pos:].strip()
             question_lst.append(question)
         return question_lst
