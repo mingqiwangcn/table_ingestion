@@ -89,21 +89,17 @@ def split_questions(q_info_lst, cpr_tab_no_map):
             q_dict[table_id] = []
         group_q_lst = q_dict[table_id]
         group_q_lst.append(q_info)
-    
     table_id_lst = list(q_dict.keys())
     random.shuffle(table_id_lst)
     num_train = int(len(table_id_lst) * 0.8)
     train_table_id_lst = table_id_lst[:num_train]
     dev_table_id_lst = table_id_lst[num_train:]
-
     train_q_lst = []
     for table_id in train_table_id_lst:
         train_q_lst.extend(q_dict[table_id])
-
     dev_q_lst = []
     for table_id in dev_table_id_lst:
         dev_q_lst.extend(q_dict[table_id])
-    
     return train_q_lst, dev_q_lst
 
 def create_data(q_info_lst, cpr_tab_no_map, cpr_tab_id_map, base_map, f_o_cpr):
@@ -141,8 +137,6 @@ def create_data(q_info_lst, cpr_tab_no_map, cpr_tab_id_map, base_map, f_o_cpr):
         cpr_example['ctx'] = [cpr_pos_ctx] + cpr_neg_ctx_lst
         cpr_example['pos_idxes'] = [0]
         cpr_example['neg_idxes'] = list(range(1, len(cpr_example['ctx'])))
-
-        import pdb; pdb.set_trace()
         f_o_cpr.write(json.dumps(cpr_example) + '\n')
 
 def get_base_text_samples(base_p_id_lst, base_map, num_samples):
