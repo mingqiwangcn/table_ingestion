@@ -121,7 +121,7 @@ def create_example(table_no, table_id, q_id, question):
         'question':question,
         'answers':[],
         'target':'',
-        'ctx':[],
+        'ctxs':[],
         'pos_idxes':[],
         'neg_idxes':[]
     }
@@ -137,12 +137,12 @@ def create_context(passage):
 
 def update_cpr_base_ctx_pair(offset_map, cpr_example, base_example, 
                              cpr_ctx, base_ctx_lst):
-    cpr_offset = len(cpr_example['ctx'])
-    base_offset = len(base_example['ctx'])
+    cpr_offset = len(cpr_example['ctxs'])
+    base_offset = len(base_example['ctxs'])
     assert (cpr_offset not in offset_map)
     offset_map[cpr_offset] = [(base_offset + pos) for pos, a in enumerate(base_ctx_lst)]
-    cpr_example['ctx'].append(cpr_ctx)
-    base_example['ctx'] += base_ctx_lst
+    cpr_example['ctxs'].append(cpr_ctx)
+    base_example['ctxs'] += base_ctx_lst
 
 def create_data(q_info_lst, cpr_tab_no_map, cpr_tab_id_map, base_map, 
                 cpr_file, base_file, cpr_base_offset_map_file):
@@ -175,7 +175,7 @@ def create_data(q_info_lst, cpr_tab_no_map, cpr_tab_id_map, base_map,
                                  cpr_neg_ctx, base_neg_ctx_lst)
 
         cpr_example['pos_idxes'] = [0]
-        cpr_example['neg_idxes'] = list(range(1, len(cpr_example['ctx'])))
+        cpr_example['neg_idxes'] = list(range(1, len(cpr_example['ctxs'])))
         f_o_cpr.write(json.dumps(cpr_example) + '\n')
         f_o_base.write(json.dumps(base_example) + '\n')
         exa_offset_map = {'id':q_id, 'offset_map':cpr_base_offset_map}
