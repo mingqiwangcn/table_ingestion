@@ -29,13 +29,16 @@ import torch.nn as nn
 import torch.nn.functional as F
 import datetime
 import glob
+import json
+import random
 
 class Teacher:
-    def __init__(self, model):
+    def __init__(self, model, passage_map):
         self.model = model
         self.model.to(opt.device)
         self.model.eval()
         self.emb_precom_dict = None
+        self.passage_map = passage_map
 
     def calc_logits(self, batch, temperature):
         if self.emb_precom_dict is not None:
@@ -116,7 +119,11 @@ class Teacher:
                     part_emb_dict = pickle.load(f)
                     self.emb_precom_dict.update(part_emb_dict)
   
-        
+    def assert_same_size(self, batch_sample_ctx_idxes):
+        size = len(batch_sample_ctx_idxes[0])
+        for idx_lst in batch_sample_ctx_idxes:
+            assert len(idx_lst) == size
+    
     def get_batch_embs(self, batch):
         emb_dict = self.emb_precom_dict
         question_vector_lst = []
@@ -125,13 +132,19 @@ class Teacher:
         q_id_lst = index_info['q_ids']
         meta_dict = batch[-1]
         batch_sample_ctx_idxes = meta_dict['sample_ctx_idxes']
+        self.assert_same_size(batch_sample_ctx_idxes)
         for batch_idx, q_id in enumerate(q_id_lst):
+            stu_tea_map = self.passage_map[q_id]['offset_map']
             emb_data = emb_dict[q_id]
             question_vector = emb_data['q_emb'].view(1, -1)
             question_vector_lst.append(question_vector)
             all_ctx_vector = emb_data['ctx_emb']
-            passage_idxes = batch_sample_ctx_idxes[batch_idx]
-            passage_emb_lst = [all_ctx_vector[a].view(1, -1) for a in passage_idxes] 
+            student_passage_idxes = batch_sample_ctx_idxes[batch_idx]
+            teacher_passage_idxes = []
+            for student_idx in student_passage_idxes:
+                sample_tea_idx = random.sample(stu_tea_map[str(student_idx)], 1)[0]
+                teacher_passage_idxes.append(sample_tea_idx)
+            passage_emb_lst = [all_ctx_vector[a].view(1, -1) for a in teacher_passage_idxes] 
             passage_vector_lst.extend(passage_emb_lst)
 
         batch_q_vector = torch.cat(question_vector_lst, dim=0)
@@ -273,13 +286,12 @@ def show_eval_metric(epoch, num_batch, step, eval_loss, correct_ratio):
             epoch, 'None', correct_ratio, step, num_batch))
 
 
-def load_teacher(train_examples, tokenizer):
+def load_teacher(train_examples, tokenizer, passage_map):
     assert opt.teacher_precompute_file is not None
     assert opt.teacher_model_path is not None
-    teacher_model = Retriever.from_pretrained(opt.teacher_model_path)
-    teacher_model.model.pooler = None
+    teacher_model = src.util.load_pretrained_retriever(opt.is_student, opt.teacher_model_path)
     teacher_state_dict = teacher_model.state_dict()
-    teacher = Teacher(teacher_model)
+    teacher = Teacher(teacher_model, passage_map)
     teacher.read_teacher_embeddings(train_examples, tokenizer)
     return teacher, teacher_state_dict
 
@@ -289,14 +301,39 @@ def get_expr_name(tag):
                 now_time.year, now_time.month, now_time.day, now_time.hour, now_time.minute, now_time.second)
     return expr_name 
 
+def set_special_tokens(model, tokenizer, example_lst):
+    special_token_set = set()
+    for example in example_lst:
+        special_token_set.update(set(example['special_tokens']))
+    
+    special_token_lst = list(special_token_set)
+    tokenizer.add_tokens(special_token_lst, special_tokens=True)
+    model.ctx_encoder.model.resize_token_embeddings(len(tokenizer))
+
+def load_student_teacher_passage_map():
+    passage_map = {}
+    with open(opt.student_teacher_map) as f:
+        for line in tqdm(f):
+            item = json.loads(line)
+            q_id = item['qid']
+            passage_map[q_id] = item
+    return passage_map
+
 if __name__ == "__main__":
     options = Options()
     options.add_retriever_options()
     options.add_optim_options()
+
+    options.parser.add_argument('--train_teacher_data', type=str)
+    options.parser.add_argument('--student_teacher_map', type=str)
+    
     opt = options.parse()
     torch.manual_seed(opt.seed)
     src.slurm.init_distributed_mode(opt)
     src.slurm.init_signal_handler()
+
+    opt.passage_maxlength = 511
+    opt.question_maxlength = 40
 
     opt.name = get_expr_name('train' if opt.do_train else 'eval') 
     dir_path = Path(opt.checkpoint_dir)/opt.name
@@ -312,19 +349,21 @@ if __name__ == "__main__":
 
     #Load data
     tokenizer = transformers.BertTokenizerFast.from_pretrained('bert-base-uncased')
-     
     if opt.do_train:
         collator_train = src.data.RetrieverCollator(
             tokenizer, 
             passage_maxlength=opt.passage_maxlength, 
             question_maxlength=opt.question_maxlength,
-            sample_pos_ctx=True,
-            sample_neg_ctx=True,
+            sample_pos_ctx=False,
+            sample_neg_ctx=False,
             num_neg_ctxs=opt.num_train_neg_ctxs,
         )
         logger.info('loading %s' % opt.train_data)
         train_examples = src.data.load_data(opt.train_data)
         train_dataset = src.data.Dataset(train_examples, opt.n_context)
+
+        train_teacher_examples = src.data.load_data(opt.train_teacher_data)
+        train_teacher_dataset = src.data.Dataset(train_teacher_examples, opt.n_context)
 
     collator_eval = src.data.RetrieverCollator(
         tokenizer, 
@@ -353,24 +392,25 @@ if __name__ == "__main__":
         projection=False,
     )
     
+    model = None
     if opt.do_train:
         model_class = StudentRetriever
-        teacher, teacher_state_dict = load_teacher(train_examples, tokenizer)
-        if opt.model_path == "none":
-            model = model_class(config, teacher_state_dict=teacher_state_dict)
-            src.util.set_dropout(model, opt.dropout)
-            model = model.to(opt.device)
-            optimizer, scheduler = src.util.set_optim(opt, model)
-        else:
-            assert False, 'Not supported.'
+        passage_map = load_student_teacher_passage_map()
+        teacher, teacher_state_dict = load_teacher(train_teacher_examples, tokenizer, passage_map)
+        model = src.util.load_pretrained_retriever(opt.is_student, opt.model_path)
+        src.util.set_dropout(model, opt.dropout)
+        model = model.to(opt.device)
+        optimizer, scheduler = src.util.set_optim(opt, model)
         model.set_teacher(teacher)
     else:
         assert (opt.model_path != 'none') and (opt.model_path is not None)
         model = src.util.load_pretrained_retriever(opt.is_student, opt.model_path)
         logger.info(f"Model loaded from {opt.model_path}")
-         
+    
+    set_special_tokens(model, tokenizer, train_examples + eval_examples)
     model = model.to(opt.device)
-    if opt.do_train: 
+    
+    if opt.do_train:
         optimizer, scheduler = src.util.set_optim(opt, model)
         train(model, optimizer, scheduler, global_step, train_dataset, eval_dataset, opt,
               collator_train, best_eval_loss, collator_eval)

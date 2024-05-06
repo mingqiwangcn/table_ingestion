@@ -117,22 +117,25 @@ def create_example(table_no, table_id, q_id, question):
     example = {
         'table_number':table_no,
         'table_id':table_id,
-        'id':q_id,
+        'qid':q_id,
         'question':question,
         'answers':[],
         'target':'',
         'ctxs':[],
         'pos_idxes':[],
-        'neg_idxes':[]
+        'hard_neg_idxes':[],
+        'special_tokens':[]
     }
     return example
 
-def create_context(passage):
+def create_context(passage_info, special_token_set=None):
     ctx = {
         'title':'',
-        'text':passage,
+        'text':passage_info['passage'],
         'score':1.0
     }
+    if special_token_set is not None:
+        special_token_set.update(set(passage_info['tag']['special_tokens']))
     return ctx
 
 def update_cpr_base_ctx_pair(offset_map, cpr_example, base_example, 
@@ -140,7 +143,7 @@ def update_cpr_base_ctx_pair(offset_map, cpr_example, base_example,
     cpr_offset = len(cpr_example['ctxs'])
     base_offset = len(base_example['ctxs'])
     assert (cpr_offset not in offset_map)
-    offset_map[cpr_offset] = [(base_offset + pos) for pos, a in enumerate(base_ctx_lst)]
+    offset_map[str(cpr_offset)] = [(base_offset + pos) for pos, a in enumerate(base_ctx_lst)]
     cpr_example['ctxs'].append(cpr_ctx)
     base_example['ctxs'] += base_ctx_lst
 
@@ -157,10 +160,11 @@ def create_data(q_info_lst, cpr_tab_no_map, cpr_tab_id_map, base_map,
         cpr_example = create_example(q_table_number, q_table_id, q_id, question)
         base_example = create_example(q_table_number, q_table_id, q_id, question)
         pos_table_id = q_table_id
+        special_token_set = set()
         cpr_pos_passge_info = cpr_tab_no_map[q_table_number]
         cpr_base_p_id_lst = cpr_pos_passge_info['base_p_id_lst']
         cpr_base_offset_map = {}
-        cpr_pos_ctx = create_context(cpr_pos_passge_info['passage'])
+        cpr_pos_ctx = create_context(cpr_pos_passge_info, special_token_set)
         base_pos_ctx_lst = create_base_context_lst(cpr_base_p_id_lst, base_map, 3)
         
         update_cpr_base_ctx_pair(cpr_base_offset_map, cpr_example, base_example, 
@@ -168,17 +172,18 @@ def create_data(q_info_lst, cpr_tab_no_map, cpr_tab_id_map, base_map,
         
         cpr_neg_passage_samples = get_cpr_neg_passage_samples(pos_table_id, cpr_tab_id_map, 20)
         for cpr_neg_passage_info in cpr_neg_passage_samples:
-            cpr_neg_ctx = create_context(cpr_neg_passage_info['passage'])
+            cpr_neg_ctx = create_context(cpr_neg_passage_info, special_token_set)
             base_neg_ctx_lst = create_base_context_lst(
                 cpr_neg_passage_info['base_p_id_lst'], base_map, 3)
             update_cpr_base_ctx_pair(cpr_base_offset_map, cpr_example, base_example, 
                                  cpr_neg_ctx, base_neg_ctx_lst)
 
+        cpr_example['special_tokens'] = list(special_token_set)
         cpr_example['pos_idxes'] = [0]
-        cpr_example['neg_idxes'] = list(range(1, len(cpr_example['ctxs'])))
+        cpr_example['hard_neg_idxes'] = list(range(1, len(cpr_example['ctxs'])))
         f_o_cpr.write(json.dumps(cpr_example) + '\n')
         f_o_base.write(json.dumps(base_example) + '\n')
-        exa_offset_map = {'id':q_id, 'offset_map':cpr_base_offset_map}
+        exa_offset_map = {'qid':q_id, 'offset_map':cpr_base_offset_map}
         f_offset_map.write(json.dumps(exa_offset_map) + '\n')
     f_o_cpr.close()
     f_o_base.close()
@@ -187,7 +192,7 @@ def create_data(q_info_lst, cpr_tab_no_map, cpr_tab_id_map, base_map,
 def create_base_context_lst(base_p_id_lst, base_map, num_samples):
     M = min(len(base_p_id_lst), num_samples)
     sample_base_p_id_lst = random.sample(base_p_id_lst, M)
-    ctx_lst = [create_context(base_map[a]['passage']) for a in sample_base_p_id_lst]
+    ctx_lst = [create_context(base_map[a]) for a in sample_base_p_id_lst]
     return ctx_lst
 
 def get_cpr_neg_passage_samples(pos_table_id, p_tab_id_map, num_neg_samples):
