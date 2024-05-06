@@ -26,9 +26,12 @@ def read_tables(args):
 def read_questions(args, cpr_tab_no_map):
     question_file = os.path.join(args.sample_dir, 'questions.jsonl')
     q_info_lst = []
+    q_id = 0
     with open(question_file) as f:
         for line in tqdm(f):
             q_info = json.loads(line)
+            q_id += 1
+            q_info['id'] = q_id
             q_info_lst.append(q_info)
     return split_questions(q_info_lst, cpr_tab_no_map)
 
@@ -63,22 +66,30 @@ def main():
     work_dir = os.path.dirname(os.getcwd())
     args.work_dir = work_dir
     args.sample_dir = os.path.join(work_dir, 'output', args.dataset, args.strategy, 'samples')
-    train_file = os.path.join(args.sample_dir, 'train.jsonl')
-    if os.path.isfile(train_file):
-        print(f'{train_file} already exists')
+
+    train_dir = os.path.join(args.sample_dir, 'train')
+    if os.path.isdir(train_dir):
+        print(f'{train_dir} already exists')
         return
-    dev_file = os.path.join(args.sample_dir, 'dev.jsonl')
-    if os.path.isfile(dev_file):
-        print(f'{dev_file} already exists')
-        return
+    os.mkdir(train_dir)
+
+    train_cpr_file = os.path.join(train_dir, 'train_cpr.jsonl')
+    train_base_file = os.path.join(train_dir, 'train_base.jsonl')
+    train_cpr_base_offset_map_file = os.path.join(train_dir, 'train_cpr_base_map.jsonl')
+    dev_cpr_file = os.path.join(train_dir, 'dev_cpr.jsonl')
+    dev_base_file = os.path.join(train_dir, 'dev_base.jsonl')
+    dev_cpr_base_offset_map_file = os.path.join(train_dir, 'dev_cpr_base_map.jsonl')
+    
     cpr_tab_no_map, cpr_tab_id_map = read_cpr_passages(args)
     table_dict, table_number_map = read_tables(args)
     train_q_info_lst, dev_q_info_lst = read_questions(args, cpr_tab_no_map)
     base_map = read_base_passages(args)
-    with open(train_file, 'w') as f_o_train_cpr:
-        create_data(train_q_info_lst, cpr_tab_no_map, cpr_tab_id_map, base_map, f_o_train_cpr)
-    with open(dev_file, 'w') as f_o_dev_cpr:
-        create_data(dev_q_info_lst, cpr_tab_no_map, cpr_tab_id_map, base_map, f_o_dev_cpr)
+
+    create_data(train_q_info_lst, cpr_tab_no_map, cpr_tab_id_map, 
+                base_map, train_cpr_file, train_base_file, train_cpr_base_offset_map_file)
+    
+    create_data(dev_q_info_lst, cpr_tab_no_map, cpr_tab_id_map, 
+                base_map, dev_cpr_file, dev_base_file, dev_cpr_base_offset_map_file)
 
 def split_questions(q_info_lst, cpr_tab_no_map):
     q_dict = {}
@@ -102,48 +113,82 @@ def split_questions(q_info_lst, cpr_tab_no_map):
         dev_q_lst.extend(q_dict[table_id])
     return train_q_lst, dev_q_lst
 
-def create_data(q_info_lst, cpr_tab_no_map, cpr_tab_id_map, base_map, f_o_cpr):
-    for q_id, q_info in tqdm(enumerate(q_info_lst), total=len(q_info_lst)):
+def create_example(table_no, table_id, q_id, question):
+    example = {
+        'table_number':table_no,
+        'table_id':table_id,
+        'id':q_id,
+        'question':question,
+        'answers':[],
+        'target':'',
+        'ctx':[],
+        'pos_idxes':[],
+        'neg_idxes':[]
+    }
+    return example
+
+def create_context(passage):
+    ctx = {
+        'title':'',
+        'text':passage,
+        'score':1.0
+    }
+    return ctx
+
+def update_cpr_base_ctx_pair(offset_map, cpr_example, base_example, 
+                             cpr_ctx, base_ctx_lst):
+    cpr_offset = len(cpr_example['ctx'])
+    base_offset = len(base_example['ctx'])
+    assert (cpr_offset not in offset_map)
+    offset_map[cpr_offset] = [(base_offset + pos) for pos, a in enumerate(base_ctx_lst)]
+    cpr_example['ctx'].append(cpr_ctx)
+    base_example['ctx'] += base_ctx_lst
+
+def create_data(q_info_lst, cpr_tab_no_map, cpr_tab_id_map, base_map, 
+                cpr_file, base_file, cpr_base_offset_map_file):
+    f_o_cpr = open(cpr_file, 'w')
+    f_o_base = open(base_file, 'w')
+    f_offset_map = open(cpr_base_offset_map_file, 'w')
+    for q_info in tqdm(q_info_lst):
+        q_id = q_info['id']
         q_table_number = q_info['table_number']
         q_table_id = cpr_tab_no_map[q_table_number]['tag']['table_id']
-        cpr_example = {
-            'table_number':q_table_number,
-            'table_id':q_table_id,
-            'id':q_id,
-            'q_id':q_id,
-            'question':q_info['question'],
-            'answers':[],
-            'target':'',
-            'ctx':[],
-            'pos_idxes':[],
-            'neg_idxes':[]
-        }
+        question = q_info['question']
+        cpr_example = create_example(q_table_number, q_table_id, q_id, question)
+        base_example = create_example(q_table_number, q_table_id, q_id, question)
         pos_table_id = q_table_id
         cpr_pos_passge_info = cpr_tab_no_map[q_table_number]
         cpr_base_p_id_lst = cpr_pos_passge_info['base_p_id_lst']
-        cpr_pos_ctx = {
-            'title':'',
-            'text':cpr_pos_passge_info['passage'],
-            'base_text_lst':get_base_text_samples(cpr_base_p_id_lst, base_map, 3),
-            'score':1.0
-        }
+        cpr_base_offset_map = {}
+        cpr_pos_ctx = create_context(cpr_pos_passge_info['passage'])
+        base_pos_ctx_lst = create_base_context_lst(cpr_base_p_id_lst, base_map, 3)
+        
+        update_cpr_base_ctx_pair(cpr_base_offset_map, cpr_example, base_example, 
+                                 cpr_pos_ctx, base_pos_ctx_lst)
+        
         cpr_neg_passage_samples = get_cpr_neg_passage_samples(pos_table_id, cpr_tab_id_map, 20)
-        cpr_neg_ctx_lst = [{
-                              'title':'',
-                              'text':a,
-                              'base_text_lst':get_base_text_samples(a['base_p_id_lst'], base_map, 3),
-                              'score':1.0 
-                           } for a in cpr_neg_passage_samples]
-        cpr_example['ctx'] = [cpr_pos_ctx] + cpr_neg_ctx_lst
+        for cpr_neg_passage_info in cpr_neg_passage_samples:
+            cpr_neg_ctx = create_context(cpr_neg_passage_info['passage'])
+            base_neg_ctx_lst = create_base_context_lst(
+                cpr_neg_passage_info['base_p_id_lst'], base_map, 3)
+            update_cpr_base_ctx_pair(cpr_base_offset_map, cpr_example, base_example, 
+                                 cpr_neg_ctx, base_neg_ctx_lst)
+
         cpr_example['pos_idxes'] = [0]
         cpr_example['neg_idxes'] = list(range(1, len(cpr_example['ctx'])))
         f_o_cpr.write(json.dumps(cpr_example) + '\n')
+        f_o_base.write(json.dumps(base_example) + '\n')
+        exa_offset_map = {'id':q_id, 'offset_map':cpr_base_offset_map}
+        f_offset_map.write(json.dumps(exa_offset_map) + '\n')
+    f_o_cpr.close()
+    f_o_base.close()
+    f_offset_map.close()
 
-def get_base_text_samples(base_p_id_lst, base_map, num_samples):
+def create_base_context_lst(base_p_id_lst, base_map, num_samples):
     M = min(len(base_p_id_lst), num_samples)
     sample_base_p_id_lst = random.sample(base_p_id_lst, M)
-    sample_text_lst = [base_map[a]['passage'] for a in sample_base_p_id_lst]
-    return sample_text_lst
+    ctx_lst = [create_context(base_map[a]['passage']) for a in sample_base_p_id_lst]
+    return ctx_lst
 
 def get_cpr_neg_passage_samples(pos_table_id, p_tab_id_map, num_neg_samples):
     neg_passage_lst = []
