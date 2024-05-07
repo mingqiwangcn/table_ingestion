@@ -153,7 +153,8 @@ class Teacher:
 
 
 def train(model, optimizer, scheduler, global_step,
-          train_dataset, dev_dataset, opt, collator_train, best_eval_loss, collator_eval):
+          train_dataset, dev_dataset, opt, collator_train, 
+          best_eval_loss, collator_eval):
 
     if opt.is_main:
         try:
@@ -177,8 +178,9 @@ def train(model, optimizer, scheduler, global_step,
     while epoch <= opt.max_epoch:
         model.train()
         epoch += 1
-        total_examples = 0
+        total = 0
         total_correct_count = 0
+        total_teacher_correct_count = 0
         for b_idx, batch in enumerate(train_dataloader):
             epoch_step = b_idx + 1
             global_step += 1
@@ -194,7 +196,12 @@ def train(model, optimizer, scheduler, global_step,
                 passage_mask=passage_mask.cuda(),
                 pos_idxes_per_question=pos_idxes_per_question,
             )
-            total_examples += 1
+
+            _, teacher_max_idxs = torch.max(teacher_logits, 1)
+            teacher_correct_count = ((teacher_max_idxs == pos_idxes_per_question).sum())
+            total_teacher_correct_count += teacher_correct_count
+
+            total += question_ids.size(0)
             total_correct_count += correct_count
             
             student_logits = model.calc_logits(student_score, opt.distill_temperature)
@@ -212,18 +219,16 @@ def train(model, optimizer, scheduler, global_step,
 
             train_loss = src.util.average_main(train_loss, opt)
             curr_loss += train_loss.item()
-            
-            logger.info('epoch=%d loss=%f step=%d/%d' % (epoch, train_loss.item(), 
-                        epoch_step, num_batch))    
-
-            if global_step % 500 == 0:
-                evaluate(model, dev_dataset, collator_eval, opt, epoch)
-                src.util.save(model, optimizer, scheduler, global_step, best_eval_loss, 
-                          opt, dir_path, f"epoch-{epoch}-global_step-{global_step}")
+            correct_ratio = total_correct_count / total
+            teacher_correct_ratio = total_teacher_correct_count / total
+            logger.info('epoch=%d loss=%f correct_ratio=%f teacher_correct_ratio=%f step=%d/%d' % (epoch, train_loss.item(), correct_ratio, teacher_correct_ratio, epoch_step, num_batch))    
+        
+        evaluate(model, dev_dataset, collator_eval, opt, epoch)
+        src.util.save(model, optimizer, scheduler, global_step, best_eval_loss, 
+                    opt, dir_path, f"epoch-{epoch}-global_step-{global_step}")
     
     logger.info('best_eval_loss= best_eval_epoch=' % (best_eval_loss, best_eval_epoch))
-        
-
+    
 def evaluate(model, dataset, collator, opt, epoch):
     sampler = SequentialSampler(dataset)
     dataloader = DataLoader(
@@ -239,11 +244,14 @@ def evaluate(model, dataset, collator, opt, epoch):
         model = model.module
     total = 0
     total_correct_count = 0
+    total_teacher_correct_count = 0
     eval_loss = .0
     num_batch = len(dataloader)
     with torch.no_grad():
         for b_idx, batch in enumerate(dataloader):
             step = b_idx + 1
+            teacher_logits = model.teacher.calc_logits(batch, opt.distill_temperature)
+
             (idx, question_ids, question_mask, context_ids, context_mask, meta_dict) = batch
             pos_idxes_per_question = torch.tensor(meta_dict['global_pos_idxes']).cuda()
             _, loss, correct_count = model(
@@ -254,6 +262,10 @@ def evaluate(model, dataset, collator, opt, epoch):
                 pos_idxes_per_question=pos_idxes_per_question,
             )
             
+            _, teacher_max_idxs = torch.max(teacher_logits, 1)
+            teacher_correct_count = ((teacher_max_idxs == pos_idxes_per_question).sum())
+            total_teacher_correct_count += teacher_correct_count
+
             total += question_ids.size(0)
             total_correct_count += int(correct_count)
           
@@ -261,7 +273,10 @@ def evaluate(model, dataset, collator, opt, epoch):
                 eval_loss += loss.item() 
             
             correct_ratio = total_correct_count / total
-            show_eval_metric(epoch, num_batch, step, eval_loss, correct_ratio)
+            teacher_correct_ratio = total_teacher_correct_count / total
+
+            show_eval_metric(epoch, num_batch, step, eval_loss, 
+                             correct_ratio, teacher_correct_ratio)
                 
         global best_eval_loss
         global best_eval_epoch
@@ -276,14 +291,14 @@ def evaluate(model, dataset, collator, opt, epoch):
                     best_eval_epoch = epoch
     
 
-def show_eval_metric(epoch, num_batch, step, eval_loss, correct_ratio):
+def show_eval_metric(epoch, num_batch, step, eval_loss, correct_ratio, teacher_correct_ratio):
     if eval_loss is not None:
         mean_loss = eval_loss / step 
-        logger.info('Eval: epoch=%d loss=%f correct ratio=%f step=%d/%d' % (
-            epoch, mean_loss, correct_ratio, step, num_batch))
+        logger.info('Eval: epoch=%d loss=%f correct ratio=%f teacher_correct_ratio=%f step=%d/%d' % (
+            epoch, mean_loss, correct_ratio, teacher_correct_ratio, step, num_batch))
     else:
-        logger.info('Eval: epoch=%d loss=%s correct ratio=%f step=%d/%d' % (
-            epoch, 'None', correct_ratio, step, num_batch))
+        logger.info('Eval: epoch=%d loss=%s correct ratio=%f teacher_correct_ratio=%f step=%d/%d' % (
+            epoch, 'None', correct_ratio, teacher_correct_ratio, step, num_batch))
 
 
 def load_teacher(train_examples, tokenizer, passage_map):
@@ -305,28 +320,26 @@ def set_special_tokens(model, tokenizer, example_lst):
     special_token_set = set()
     for example in example_lst:
         special_token_set.update(set(example['special_tokens']))
-    
     special_token_lst = list(special_token_set)
     tokenizer.add_tokens(special_token_lst, special_tokens=True)
+    model.question_encoder.model.resize_token_embeddings(len(tokenizer))
     model.ctx_encoder.model.resize_token_embeddings(len(tokenizer))
 
-def load_student_teacher_passage_map():
-    passage_map = {}
-    with open(opt.student_teacher_map) as f:
+def load_student_teacher_passage_map(map_file, passage_map):
+    with open(map_file) as f:
         for line in tqdm(f):
             item = json.loads(line)
             q_id = item['qid']
             passage_map[q_id] = item
-    return passage_map
 
 if __name__ == "__main__":
     options = Options()
     options.add_retriever_options()
     options.add_optim_options()
-
     options.parser.add_argument('--train_teacher_data', type=str)
-    options.parser.add_argument('--student_teacher_map', type=str)
-    
+    options.parser.add_argument('--dev_teacher_data', type=str)
+    options.parser.add_argument('--train_student_teacher_map', type=str)
+    options.parser.add_argument('--dev_student_teacher_map', type=str)
     opt = options.parse()
     torch.manual_seed(opt.seed)
     src.slurm.init_distributed_mode(opt)
@@ -363,7 +376,8 @@ if __name__ == "__main__":
         train_dataset = src.data.Dataset(train_examples, opt.n_context)
 
         train_teacher_examples = src.data.load_data(opt.train_teacher_data)
-        train_teacher_dataset = src.data.Dataset(train_teacher_examples, opt.n_context)
+        dev_teacher_examples = src.data.load_data(opt.dev_teacher_data)
+        all_teacher_examples = train_teacher_examples + dev_teacher_examples
 
     collator_eval = src.data.RetrieverCollator(
         tokenizer, 
@@ -395,8 +409,10 @@ if __name__ == "__main__":
     model = None
     if opt.do_train:
         model_class = StudentRetriever
-        passage_map = load_student_teacher_passage_map()
-        teacher, teacher_state_dict = load_teacher(train_teacher_examples, tokenizer, passage_map)
+        passage_map = {}
+        load_student_teacher_passage_map(opt.train_student_teacher_map, passage_map)
+        load_student_teacher_passage_map(opt.dev_student_teacher_map, passage_map)
+        teacher, teacher_state_dict = load_teacher(all_teacher_examples, tokenizer, passage_map)
         model = src.util.load_pretrained_retriever(opt.is_student, opt.model_path)
         src.util.set_dropout(model, opt.dropout)
         model = model.to(opt.device)
@@ -408,12 +424,13 @@ if __name__ == "__main__":
         logger.info(f"Model loaded from {opt.model_path}")
     
     set_special_tokens(model, tokenizer, train_examples + eval_examples)
+    tok_dir = os.path.join(dir_path, 'tok')
+    os.mkdir(tok_dir)
+    tokenizer.save_pretrained(tok_dir)
     model = model.to(opt.device)
-    
     if opt.do_train:
         optimizer, scheduler = src.util.set_optim(opt, model)
-        train(model, optimizer, scheduler, global_step, train_dataset, eval_dataset, opt,
-              collator_train, best_eval_loss, collator_eval)
+        train(model, optimizer, scheduler, global_step, train_dataset, eval_dataset, opt, collator_train, best_eval_loss, collator_eval)
     else:
         evaluate(model, eval_dataset, collator_eval, opt, 0) 
     

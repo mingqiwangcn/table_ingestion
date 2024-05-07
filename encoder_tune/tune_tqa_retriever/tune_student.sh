@@ -8,7 +8,9 @@ python tune_student.py \
 --teacher_model_path /home/cc/code/table_project/models/student_tqa_retriever_step_29500 \
 --train_data /home/cc/code/table_project/table_ingestion/output/nyc_open_10K/schema_cell_coding/samples/train/train_cpr.jsonl \
 --train_teacher_data /home/cc/code/table_project/table_ingestion/output/nyc_open_10K/schema_cell_coding/samples/train/train_base.jsonl \
---student_teacher_map /home/cc/code/table_project/table_ingestion/output/nyc_open_10K/schema_cell_coding/samples/train/train_cpr_base_map.jsonl \
+--dev_teacher_data /home/cc/code/table_project/table_ingestion/output/nyc_open_10K/schema_cell_coding/samples/train/dev_base.jsonl \
+--train_student_teacher_map /home/cc/code/table_project/table_ingestion/output/nyc_open_10K/schema_cell_coding/samples/train/train_cpr_base_map.jsonl \
+--dev_student_teacher_map /home/cc/code/table_project/table_ingestion/output/nyc_open_10K/schema_cell_coding/samples/train/dev_cpr_base_map.jsonl \
 --eval_data /home/cc/code/table_project/table_ingestion/output/nyc_open_10K/schema_cell_coding/samples/train/dev_cpr.jsonl \
 --per_gpu_batch_size 10 \
 --total_steps 20000 \
