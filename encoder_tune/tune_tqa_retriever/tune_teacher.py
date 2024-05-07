@@ -19,7 +19,6 @@ import src.util
 import src.evaluation
 import src.data
 from src.model import Retriever
-from src.student_retriever import StudentRetriever
 from src.options import Options
 
 import pickle
@@ -154,7 +153,7 @@ class Teacher:
 
 def train(model, optimizer, scheduler, global_step,
           train_dataset, dev_dataset, opt, collator_train, 
-          best_eval_loss, collator_eval):
+          best_eval_loss, collator_eval, teacher):
 
     if opt.is_main:
         try:
@@ -185,7 +184,7 @@ def train(model, optimizer, scheduler, global_step,
             epoch_step = b_idx + 1
             global_step += 1
            
-            teacher_logits = model.teacher.calc_logits(batch, opt.distill_temperature)
+            teacher_logits = teacher.calc_logits(batch, opt.distill_temperature)
             
             (idx, question_ids, question_mask, passage_ids, passage_mask, meta_dict) = batch
             pos_idxes_per_question = torch.tensor(meta_dict['global_pos_idxes']).cuda()
@@ -223,13 +222,13 @@ def train(model, optimizer, scheduler, global_step,
             teacher_correct_ratio = total_teacher_correct_count / total
             logger.info('epoch=%d loss=%f correct_ratio=%f teacher_correct_ratio=%f step=%d/%d' % (epoch, train_loss.item(), correct_ratio, teacher_correct_ratio, epoch_step, num_batch))    
         
-        evaluate(model, dev_dataset, collator_eval, opt, epoch)
+        evaluate(model, dev_dataset, collator_eval, opt, epoch, teacher)
         src.util.save(model, optimizer, scheduler, global_step, best_eval_loss, 
                     opt, dir_path, f"epoch-{epoch}-global_step-{global_step}")
     
     logger.info('best_eval_loss= best_eval_epoch=' % (best_eval_loss, best_eval_epoch))
     
-def evaluate(model, dataset, collator, opt, epoch):
+def evaluate(model, dataset, collator, opt, epoch, teacher):
     sampler = SequentialSampler(dataset)
     dataloader = DataLoader(
         dataset, 
@@ -250,7 +249,7 @@ def evaluate(model, dataset, collator, opt, epoch):
     with torch.no_grad():
         for b_idx, batch in enumerate(dataloader):
             step = b_idx + 1
-            teacher_logits = model.teacher.calc_logits(batch, opt.distill_temperature)
+            teacher_logits = teacher.calc_logits(batch, opt.distill_temperature)
 
             (idx, question_ids, question_mask, context_ids, context_mask, meta_dict) = batch
             pos_idxes_per_question = torch.tensor(meta_dict['global_pos_idxes']).cuda()
@@ -304,7 +303,8 @@ def show_eval_metric(epoch, num_batch, step, eval_loss, correct_ratio, teacher_c
 def load_teacher(train_examples, tokenizer, passage_map):
     assert opt.teacher_precompute_file is not None
     assert opt.teacher_model_path is not None
-    teacher_model = src.util.load_pretrained_retriever(opt.is_student, opt.teacher_model_path)
+    teacher_model = Retriever.from_pretrained(opt.teacher_model_path)
+    teacher_model.model.pooler = None
     teacher_state_dict = teacher_model.state_dict()
     teacher = Teacher(teacher_model, passage_map)
     teacher.read_teacher_embeddings(train_examples, tokenizer)
@@ -322,8 +322,7 @@ def set_special_tokens(model, tokenizer, example_lst):
         special_token_set.update(set(example['special_tokens']))
     special_token_lst = list(special_token_set)
     tokenizer.add_tokens(special_token_lst, special_tokens=True)
-    model.question_encoder.model.resize_token_embeddings(len(tokenizer))
-    model.ctx_encoder.model.resize_token_embeddings(len(tokenizer))
+    model.model.resize_token_embeddings(len(tokenizer))
 
 def load_student_teacher_passage_map(map_file, passage_map):
     with open(map_file) as f:
@@ -348,7 +347,7 @@ if __name__ == "__main__":
     opt.passage_maxlength = 511
     opt.question_maxlength = 40
 
-    opt.name = get_expr_name('train' if opt.do_train else 'eval') 
+    opt.name = get_expr_name('train_teacher' if opt.do_train else 'eval_teacher') 
     dir_path = Path(opt.checkpoint_dir)/opt.name
     directory_exists = dir_path.exists()
     assert (not directory_exists), '%s already exists' % str(dir_path)  
@@ -407,22 +406,26 @@ if __name__ == "__main__":
     )
     
     model = None
+    teacher = None
     if opt.do_train:
-        model_class = StudentRetriever
         passage_map = {}
         load_student_teacher_passage_map(opt.train_student_teacher_map, passage_map)
         load_student_teacher_passage_map(opt.dev_student_teacher_map, passage_map)
         teacher, teacher_state_dict = load_teacher(all_teacher_examples, tokenizer, passage_map)
-        model = src.util.load_pretrained_retriever(opt.is_student, opt.model_path)
+        #student model, initialized from teacher.
+        model = Retriever.from_pretrained(opt.teacher_model_path)
+        model.model.pooler = None
         src.util.set_dropout(model, opt.dropout)
         model = model.to(opt.device)
         optimizer, scheduler = src.util.set_optim(opt, model)
-        model.set_teacher(teacher)
+        #model.set_teacher(teacher)
     else:
+        assert False
+        '''
         assert (opt.model_path != 'none') and (opt.model_path is not None)
         model = src.util.load_pretrained_retriever(opt.is_student, opt.model_path)
         logger.info(f"Model loaded from {opt.model_path}")
-    
+        '''
     set_special_tokens(model, tokenizer, train_examples + eval_examples)
     tok_dir = os.path.join(dir_path, 'tok')
     os.mkdir(tok_dir)
@@ -430,7 +433,7 @@ if __name__ == "__main__":
     model = model.to(opt.device)
     if opt.do_train:
         optimizer, scheduler = src.util.set_optim(opt, model)
-        train(model, optimizer, scheduler, global_step, train_dataset, eval_dataset, opt, collator_train, best_eval_loss, collator_eval)
+        train(model, optimizer, scheduler, global_step, train_dataset, eval_dataset, opt, collator_train, best_eval_loss, collator_eval, teacher)
     else:
         evaluate(model, eval_dataset, collator_eval, opt, 0) 
     
