@@ -3,7 +3,7 @@ import os
 from tqdm import tqdm
 import pandas as pd
 
-CMP_Dataset = 'nyc_open_10K'
+CMP_Dataset = 'fetaqa'
 CMP_Top_Num = 10
  
 def read_retr(retr_file):
@@ -11,7 +11,7 @@ def read_retr(retr_file):
     with open(retr_file) as f:
         for line in tqdm(f):
             item = json.loads(line)
-            passage_lst = item['passages']
+            item['question'] = item['question'].strip()
             retr_data.append(item)
     return retr_data
 
