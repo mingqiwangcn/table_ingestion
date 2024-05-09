@@ -49,7 +49,7 @@ def main():
     if os.path.isfile(out_question_file):
         print(f'{out_question_file} already exists')
         return
-    work_dir = os.path.dirname(os.getcwd())
+    work_dir = os.path.dirname(os.path.dirname(os.getcwd()))
     args.work_dir = work_dir
     args.sample_dir = os.path.join(work_dir, 'output', args.dataset, args.strategy, 'samples')
     generator = ChatGptGenerator('./prompt')

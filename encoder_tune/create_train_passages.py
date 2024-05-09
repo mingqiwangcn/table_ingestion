@@ -97,7 +97,8 @@ def process_passage(task_info):
         f_o_table.write(json.dumps(sample_table_data))
 
 def load_table(table_id, table_dir):
-    table_file = os.path.join(table_dir, table_id + '.jsonl')
+    table_file_name = g_opts.file_id_map[table_id]
+    table_file = os.path.join(table_dir, table_file_name)
     with open(table_file) as f:
         table_data = json.load(f)
     return table_data
@@ -148,6 +149,12 @@ def get_serial_row_col(tag_info):
         serial_row_col.append(item)
     return serial_row_col
 
+def read_table_meta(args):
+    meta_file = os.path.join('../data', args.dataset, 'table_meta.json')
+    with open(meta_file) as f:
+        table_meta = json.load(f)
+    args.file_id_map = table_meta['file_id_map']
+
 def main():
     args = get_args()
     sample_dir = os.path.join('./output', args.dataset, args.strategy, 'samples')
@@ -166,6 +173,8 @@ def main():
     args.sample_passage_part_dir = sample_passage_part_dir
 
     passage_file = os.path.join('./output', args.dataset, args.strategy, 'passages.jsonl')
+
+    read_table_meta(args)
     sample_train_data(passage_file, args)
 
 def get_args():
