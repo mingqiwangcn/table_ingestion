@@ -66,9 +66,9 @@ class ContextWindow:
             }
         }
         #comment out later
-        #out_size_re_calc = len(self.tokenizer.encode(out_text, add_special_tokens=False))
-        #assert(out_size_re_calc == out_size)
-        #assert(out_size <= self.wnd_size)
+        out_size_re_calc = len(self.tokenizer.encode(out_text, add_special_tokens=False))
+        assert(out_size_re_calc == out_size)
+        assert(out_size <= self.wnd_size)
         self.clear_content()
         return out_data
 
