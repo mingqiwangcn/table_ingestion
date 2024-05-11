@@ -18,7 +18,7 @@ class SqlOP:
 class ChatGptGenerator:
     def __init__(self, prompt_dir):
         self.buffer = []
-        self.q_size_per_table = 10
+        self.q_size_per_table = 6
         self.prompt_method = 'general'
         self.token_encoding = tiktoken.encoding_for_model(gpt.MODEL_NAME)
         #self.max_caption_size = util.Max_Title_Size 
@@ -85,7 +85,11 @@ class ChatGptGenerator:
                 return False
         return True
 
+    def use_table_caption(self):
+       return random.sample([0,1],1)[0]
+
     def sample_sql(self, table_data, sample_size):
+        table_caption = table_data['documentTitle'].strip()
         row_data = table_data['rows']
         row_lst = list(range(len(row_data)))
         col_data = table_data['columns']
@@ -119,7 +123,8 @@ class ChatGptGenerator:
             else:
                 aggr_op = random.sample(aggr_op_lst_general, 1)[0]
             if aggr_op is not None:
-               select_part_sql = f'select {aggr_op}({sel_col_name}) '   
+               select_part_sql = f'select {aggr_op}({sel_col_name}) '
+
             where_part_sql = ''
             for offset, w_col in enumerate(where_cols):
                 w_col_name = where_col_names[offset]
@@ -128,6 +133,10 @@ class ChatGptGenerator:
                 where_part_sql += self.get_where_sql(w_col_name, col_type, col_cell_text) 
                 if offset < (len(where_cols) - 1):
                     where_part_sql += ' and '
+            
+            if table_caption != '' and self.use_table_caption():
+                 where_part_sql += ' Table Context = ' + table_caption
+
             sql = select_part_sql + ' where ' + where_part_sql
             meta = {
                 'table_id':table_data['tableId'],
@@ -255,7 +264,7 @@ class ChatGptGenerator:
         response = gpt.chat_complete(self.client, self.messages)
         question_lst = []
         out_text_lst = response.split('\n')
-        tag = 'Question Text:'
+        tag = 'Paraphrased(Begin Tag):'
         for line in out_text_lst:
             offset = line.find(tag)
             if offset < 0:

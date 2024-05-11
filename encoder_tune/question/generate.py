@@ -55,8 +55,10 @@ def main():
     generator = ChatGptGenerator('./prompt')
     
     table_dict = read_tables(args)
+    table_id_lst = list(table_dict.keys())
+    sample_table_id_lst = random.sample(table_id_lst, min(1000, len(table_id_lst)))
     with open(out_question_file, 'w') as f_o:
-        for table_id in tqdm(table_dict, desc='generate questions'):
+        for table_id in tqdm(sample_table_id_lst, desc='generate questions'):
             table_sub_lst = table_dict[table_id]
             table_data = random.sample(table_sub_lst, 1)[0]
             question_lst = generator.generate_questions(table_data)
