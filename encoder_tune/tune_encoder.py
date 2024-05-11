@@ -70,10 +70,13 @@ def main():
     args.train_out_dir = os.path.join('./output', args.dataset, args.strategy, 'train_' + get_date_str())
     if not os.path.isdir(args.train_out_dir):
         os.makedirs(args.train_out_dir)
-    cpr_dir = os.path.join('./output', args.dataset, args.strategy + '_cpr')
+    
+    args.pj_dir = os.path.dirname(os.getcwd())
+    args.work_dir = os.path.dirname(args.pj_dir)
+    cpr_dir = os.path.join(args.pj_dir, 'output', args.dataset, args.strategy + '_cpr')
     cpr_emb_dir = os.path.join(cpr_dir, 'emb')
     cpr_emb_dict = load_strategy_emb(cpr_emb_dir)
-    base_dir = os.path.join('./output', args.dataset, args.strategy + '_base')
+    base_dir = os.path.join(args.pj_dir, 'output', args.dataset, args.strategy + '_base')
     base_emb_dir = os.path.join(base_dir, 'emb')
     base_emb_dict = load_strategy_emb(base_emb_dir)
     cpr_dict, special_token_lst = load_cpr_data(cpr_dir)
@@ -93,28 +96,19 @@ def get_tokenizer(special_token_lst):
     return tokenizer    
 
 def load_model(args):
-    model = SerialEncoder(args.tokenizer_size)
-    args.model = '../models/student_tqa_retriever_step_29500/pytorch_model.bin'
-    if args.model is not None:
-        state_dict = torch.load(args.model, map_location=args.device)
-        model_state_dict = copy_model_weights(state_dict)
-        model.load_state_dict(model_state_dict)
-    model = model.to(args.device)
+    enc_model = SerialEncoder(args.tokenizer_size)
+    enc_model = enc_model.to(args.device)
     if len(args.special_token_lst) > 0:
-        model.model.resize_token_embeddings(args.tokenizer_size)
-    return model
-
-def copy_model_weights(retr_state_dict):
-    model_state_dict = OrderedDict()
-    tag = 'ctx_encoder.'
-    for key in retr_state_dict:
-        if key.startswith(tag):
-            update_key = key[len(tag):]
-            model_state_dict[update_key] = retr_state_dict[key]
-    return model_state_dict
+        enc_model.model.resize_token_embeddings(args.tokenizer_size)
+    return enc_model
     
 def train(args, train_cpr_p_id, dev_cpr_p_id, cpr_dict, cpr_emb_dict, base_emb_dict):
     tokenizer = get_tokenizer(args.special_token_lst)
+
+    tok_dir = os.path.join(args.train_out_dir, 'tok')
+    os.mkdir(tok_dir)
+    tokenizer.save_pretrained(tok_dir)
+
     args.tokenizer_size = len(tokenizer)
     model = load_model(args)
     collator = SerialCollator(tokenizer)
@@ -136,12 +130,15 @@ def train(args, train_cpr_p_id, dev_cpr_p_id, cpr_dict, cpr_emb_dict, base_emb_d
             pos = offset + args.batch_size
             batch_cpr_p_id = train_cpr_p_id[offset:pos]
             batch_cpr_passage = [cpr_dict[a] for a in batch_cpr_p_id]
-            cpr_text_ids = collator(batch_cpr_passage).to(args.device)
+            cpr_id_out = collator(batch_cpr_passage)
+            cpr_text_ids = cpr_id_out[0].to(args.device)
+            cpr_schema_ids = cpr_id_out[1].to(args.device)
+
             batch_cpr_emb = get_batch_emb(batch_cpr_p_id, cpr_emb_dict).to(args.device)
-            updated_cpr_emb = model(cpr_text_ids, batch_cpr_emb)
+            updated_cpr_emb = model(cpr_text_ids, cpr_schema_ids, batch_cpr_emb)
             batch_loss = calc_loss(args, loss_func, updated_cpr_emb, 
                                    train_cpr_p_id, cpr_dict, base_emb_dict)
-            #print(f'train epoch={epoch} loss={batch_loss.item()} {num_batch}/{total_batch}')
+            print(f'train epoch={epoch} loss={batch_loss.item()} {num_batch}/{total_batch}')
             optimizer.zero_grad()
             batch_loss.backward()
             optimizer.step()
@@ -175,9 +172,12 @@ def evaluate(args, epoch, model,
             batch_cpr_p_id = dev_cpr_p_id[offset:pos]
             count += len(batch_cpr_p_id)
             batch_cpr_passage = [cpr_dict[a] for a in batch_cpr_p_id]
-            cpr_text_ids = collator(batch_cpr_passage).to(args.device)
+            cpr_id_out = collator(batch_cpr_passage)
+            cpr_text_ids = cpr_id_out[0].to(args.device)
+            cpr_schema_ids = cpr_id_out[1].to(args.device)
+
             batch_cpr_emb = get_batch_emb(batch_cpr_p_id, cpr_emb_dict).to(args.device)
-            updated_cpr_emb = model(cpr_text_ids, batch_cpr_emb)
+            updated_cpr_emb = model(cpr_text_ids, cpr_schema_ids, batch_cpr_emb)
             batch_loss = calc_loss(args, loss_func, updated_cpr_emb, 
                                    dev_cpr_p_id, cpr_dict, base_emb_dict)
             total_loss += batch_loss.item() * len(updated_cpr_emb)
@@ -227,7 +227,7 @@ def get_args():
     parser.add_argument('--dataset', type=str, required=True)
     parser.add_argument('--strategy', type=str, required=True)
     parser.add_argument('--model', type=str)
-    parser.add_argument('--batch_size', type=int, default=32)
+    parser.add_argument('--batch_size', type=int, default=16)
     args = parser.parse_args()
     return args
 

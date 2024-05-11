@@ -81,6 +81,17 @@ def uncompress_passages(compressed_passages, args):
         process_passage(task_info)
     '''
 
+def get_schema_info(table_data):
+    title = table_data['documentTitle']
+    col_data = table_data['columns']
+    col_name_lst = [a['text'] for a in col_data]
+    col_text = ' ; '.join(col_name_lst)
+    schema_info = {
+        'title':title,
+        'col_text':col_text
+    }
+    return schema_info
+
 def process_passage(task_info):
     text = task_info['text']
     p_no = task_info['p_no']
@@ -88,6 +99,10 @@ def process_passage(task_info):
     passage_info['p_no'] = p_no
     sample_table_data = set_full_serial(passage_info)
     sample_table_data['p_no'] = p_no
+    
+    schema_info = get_schema_info(sample_table_data)
+    passage_info['schema_info'] = schema_info
+
     out_file = os.path.join(g_opts.sample_passage_part_dir, f'part_{p_no}.jsonl')
     with open(out_file, 'w') as f_o:
         f_o.write(json.dumps(passage_info))
