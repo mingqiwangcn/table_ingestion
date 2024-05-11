@@ -5,8 +5,8 @@ import util
 
 EmbFileTag = '_embeddings'
 
-def get_encoder_args(model_path, show_progress=True):
-    encoder_args = argparse.Namespace(is_student=True,
+def get_encoder_args(model_path, is_student):
+    encoder_args = argparse.Namespace(is_student=is_student,
                                       passages=None,
                                       output_path=None,
                                       output_batch_size=500000,
@@ -16,15 +16,20 @@ def get_encoder_args(model_path, show_progress=True):
                                       passage_maxlength=util.Max_Seq_Length,
                                       model_path=model_path,
                                       no_fp16=False,
-                                      show_progress=show_progress
+                                      show_progress=False
                                      )
     return encoder_args
 
-def encode_blocks(work_dir, block_file):
+def encode_blocks(args):
+    block_file = f'./output/{args.dataset}/{args.strategy}/passages.jsonl'
     print('Encoding %s' % block_file)
-    encoder_model = os.path.join(work_dir, 'models/student_tqa_retriever_step_29500')
+    
+    if args.is_student:
+        encoder_model = os.path.join(args.work_dir, 'models/student_tqa_retriever_step_29500')
+    else:
+        encoder_model = os.path.join(args.work_dir, 'models/tqa_retriever')
     out_emb_file_lst = []
-    encoder_args = get_encoder_args(encoder_model, show_progress=False)
+    encoder_args = get_encoder_args(encoder_model, args.is_student)
     encoder_args.passages = block_file
     passage_dir = os.path.dirname(block_file)
     base_name = os.path.basename(block_file)
@@ -36,13 +41,13 @@ def encode_blocks(work_dir, block_file):
 
 def main():
     args = get_args()
-    block_file = f'./output/{args.dataset}/{args.strategy}/passages.jsonl'
-    encode_blocks(args.work_dir, block_file)
+    encode_blocks(args)
 
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--work_dir', type=str, required=True)
     parser.add_argument('--dataset', type=str, required=True)
+    parser.add_argument('--is_student', type=int, required=True)
     parser.add_argument('--strategy', type=str, required=True)
     args = parser.parse_args()
     return args

@@ -9,6 +9,7 @@ def get_args():
     parser.add_argument('--work_dir', type=str, required=True)
     parser.add_argument('--dataset', type=str, required=True)
     parser.add_argument('--strategy', type=str, required=True)
+    parser.add_argument('--use_student', type=int, required=True)
     parser.add_argument('--query_tag', type=str, required=True)
     parser.add_argument('--index_type', type=str)
     parser.add_argument('--n_probe', type=int)
@@ -35,7 +36,8 @@ def main():
         return
     retr_triples('test', args.work_dir, args.dataset, 
                  test_query_dir, None, False, 
-                 config, strategy=args.strategy, use_tag=False)
+                 config, strategy=args.strategy, use_tag=False, 
+                 use_student=args.use_student)
 
 if __name__ == '__main__':
     main()

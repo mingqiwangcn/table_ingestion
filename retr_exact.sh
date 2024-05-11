@@ -11,4 +11,5 @@ python retrieve.py \
     --dataset ${dataset} \
     --strategy ${strategy} \
     --query_tag test \
-    --index_type exact
+    --index_type exact\
+    --use_student 0 \

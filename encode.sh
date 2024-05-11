@@ -10,3 +10,4 @@ python ./encode.py \
     --work_dir ${work_dir} \
     --dataset ${dataset} \
     --strategy ${strategy} \
+    --is_student 0 \
