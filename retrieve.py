@@ -9,6 +9,7 @@ def get_args():
     parser.add_argument('--work_dir', type=str, required=True)
     parser.add_argument('--dataset', type=str, required=True)
     parser.add_argument('--strategy', type=str, required=True)
+    parser.add_argument('--query_tag', type=str, required=True)
     parser.add_argument('--index_type', type=str)
     parser.add_argument('--n_probe', type=int)
     args = parser.parse_args()
@@ -24,7 +25,7 @@ def main():
     config['exact_index_dir'] = os.path.abspath(f'./output/{args.dataset}/{args.strategy}/')
     config['query_batch'] = 1000
 
-    test_query_dir = os.path.join(args.work_dir, 'data', args.dataset, 'query', 'test')
+    test_query_dir = os.path.join(args.work_dir, 'data', args.dataset, 'query', args.query_tag)
     if args.index_type is not None:
         out_dir = os.path.join(test_query_dir, args.strategy, args.index_type)
     else:

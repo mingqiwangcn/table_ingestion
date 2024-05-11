@@ -10,4 +10,5 @@ python retrieve.py \
     --work_dir ${work_dir} \
     --dataset ${dataset} \
     --strategy ${strategy} \
+    --query_tag test \
     --index_type exact
