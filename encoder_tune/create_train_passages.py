@@ -20,7 +20,7 @@ def init_worker(args):
     global g_table_dir
     global g_opts
     g_tsl = OneRowBlockSerializer()
-    g_table_dir = os.path.join('../data', args.dataset, 'tables')
+    g_table_dir = os.path.join(args.work_dir, 'data', args.dataset, 'tables')
     g_opts = args
 
 def load_passages(passage_file):
@@ -30,9 +30,9 @@ def load_passages(passage_file):
             data.append(line)
     return data
 
-def sample_train_data(passage_file, args):
+def sample_train_passages(passage_file, args):
     passage_data = load_passages(passage_file)
-    K = min(len(passage_data), 10000)
+    K = min(len(passage_data), args.sample_size)
     sample_passages = random.sample(passage_data, K)
     uncompress_passages(sample_passages, args)
     out_cpr_file = os.path.join(args.sample_dir, 'sample_cpr_passages.jsonl')
@@ -63,7 +63,7 @@ def merge_passges(sample_file_pattern, f_o_cpr, f_o_base):
             f_o_cpr.write(json.dumps(passage_info) + '\n')
         
 def uncompress_passages(compressed_passages, args):
-    task_info_lst = [{'text':a, 'task_no':offset} for offset, a in enumerate(compressed_passages)]
+    task_info_lst = [{'text':a, 'p_no':offset} for offset, a in enumerate(compressed_passages)]
     
     num_workers = os.cpu_count()
     work_pool = ProcessPool(num_workers, initializer=init_worker, initargs=(args, ))
@@ -83,21 +83,24 @@ def uncompress_passages(compressed_passages, args):
 
 def process_passage(task_info):
     text = task_info['text']
-    task_no = task_info['task_no']
+    p_no = task_info['p_no']
     passage_info = json.loads(text)
-    passage_info['table_number'] = task_no
+    passage_info['p_no'] = p_no
     sample_table_data = set_full_serial(passage_info)
-    sample_table_data['table_number'] = task_no
-    out_file = os.path.join(g_opts.sample_passage_part_dir, f'part_{task_no}.jsonl')
+    sample_table_data['p_no'] = p_no
+    out_file = os.path.join(g_opts.sample_passage_part_dir, f'part_{p_no}.jsonl')
     with open(out_file, 'w') as f_o:
         f_o.write(json.dumps(passage_info))
     
-    out_table_file = os.path.join(g_opts.sample_table_dir, f'table_{task_no}.jsonl')
+    out_table_file = os.path.join(g_opts.sample_table_dir, f'table_{p_no}.jsonl')
     with open(out_table_file, 'w') as f_o_table:
         f_o_table.write(json.dumps(sample_table_data))
 
 def load_table(table_id, table_dir):
-    table_file_name = g_opts.file_id_map[table_id]
+    if g_opts.file_id_map is not None:
+        table_file_name = g_opts.file_id_map[table_id]
+    else:
+        table_file_name = f'{table_id}.jsonl'
     table_file = os.path.join(table_dir, table_file_name)
     with open(table_file) as f:
         table_data = json.load(f)
@@ -150,20 +153,26 @@ def get_serial_row_col(tag_info):
     return serial_row_col
 
 def read_table_meta(args):
-    meta_file = os.path.join('../data', args.dataset, 'table_meta.json')
+    meta_file = os.path.join(args.work_dir, 'data', args.dataset, 'table_meta.json')
+    if not os.path.isfile(meta_file):
+        args.file_id_map = None
+        return
     with open(meta_file) as f:
         table_meta = json.load(f)
     args.file_id_map = table_meta['file_id_map']
 
 def main():
     args = get_args()
-    sample_dir = os.path.join('./output', args.dataset, args.strategy, 'samples')
+    pj_dir = os.path.dirname(os.getcwd())
+    sample_dir = os.path.join(pj_dir, 'output', args.dataset, args.strategy, 'samples')
     if os.path.isdir(sample_dir):
         print(f'{sample_dir} already exists')
         return
     os.mkdir(sample_dir)
+    args.pj_dir = pj_dir
+    args.work_dir = os.path.dirname(pj_dir)
     args.sample_dir = sample_dir
-
+    
     sample_table_dir = os.path.join(sample_dir, 'tables')
     os.mkdir(sample_table_dir)
     args.sample_table_dir = sample_table_dir
@@ -172,15 +181,18 @@ def main():
     os.mkdir(sample_passage_part_dir)
     args.sample_passage_part_dir = sample_passage_part_dir
 
-    passage_file = os.path.join('./output', args.dataset, args.strategy, 'passages.jsonl')
+    passage_file = os.path.join(args.pj_dir, 'output', args.dataset, args.strategy, 'passages.jsonl')
 
     read_table_meta(args)
-    sample_train_data(passage_file, args)
+    sample_train_passages(passage_file, args)
+
+    print(f'output to {args.sample_dir}')
 
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset', type=str, required=True)
     parser.add_argument('--strategy', type=str, required=True)
+    parser.add_argument('--sample_size', type=int, required=True)
     args = parser.parse_args()
     return args
 
