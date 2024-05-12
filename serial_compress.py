@@ -67,7 +67,7 @@ class CompressSerializer(SchemaSerializer):
         code_refer_size = sum([a['code_refer_size'] for a in code_info_lst])
         cell_size = sum([a['serial_size'] for a in row_serial_cell_lst])
         pre_size_chg = sum([(a['updated_serial_size'] - a['serial_size']) for a in  pre_cells_to_update])
-        content_size = code_refer_size + cell_size + pre_size_chg
+        content_size = code_refer_size + self.serial_window.title_size + cell_size + pre_size_chg
         row_serial_info = {
             'row':row,
             'cols':block_cols,
@@ -79,7 +79,8 @@ class CompressSerializer(SchemaSerializer):
             'cell_lst':row_serial_cell_lst,
             'pre_cells_to_update':pre_cells_to_update,
             'process_add':True,
-            'cpr_start_cells':cpr_start_cells
+            'cpr_start_cells':cpr_start_cells,
+            'use_title':True,
         }
         return row_serial_info
 

@@ -13,8 +13,15 @@ class BlockSerializer(TableSerializer):
         col_info = col_data[col]
         is_last_cell = (col + 1 == len(col_data))
         sep_token = ';' if not is_last_cell else self.tokenizer.sep_token
-        cell_info['serial_text'] = col_info['text'] + ' : ' + cell_info['text'] + ' ' + sep_token + ' '
-        cell_info['serial_size'] = col_info['size'] + 1 + cell_info['size'] + 1
+
+        title_text = ''
+        title_size = 0
+        if col == 0 or len(self.serial_window.content_buffer) == 0:
+            title_text = self.serial_window.title
+            title_size = self.serial_window.title_size
+
+        cell_info['serial_text'] = title_text + col_info['text'] + ' : ' + cell_info['text'] + ' ' + sep_token + ' '
+        cell_info['serial_size'] = title_size + col_info['size'] + 1 + cell_info['size'] + 1
         
         serial_cell_lst = [cell_info]
         content_size = cell_info['serial_size']

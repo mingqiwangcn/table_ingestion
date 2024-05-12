@@ -27,12 +27,13 @@ class SchemaSerializer(TableSerializer):
         boundary_cell = row_serial_cell_lst[-1]
         boundary_cell['serial_text'] = boundary_cell['serial_text'].rstrip()[:-1] + ' ' + self.tokenizer.sep_token + ' '
         # row size includes seperator
-        row_size = sum([a['serial_size'] for a in row_serial_cell_lst])
+        row_size = self.serial_window.title_size + sum([a['serial_size'] for a in row_serial_cell_lst])
         row_serial_info = {
             'row':row,
             'cols':block_cols,
             'cell_lst':row_serial_cell_lst,
             'content_size':row_size,
+            'use_title':True,
         }
         return row_serial_info
     
@@ -86,7 +87,7 @@ class SchemaSerializer(TableSerializer):
             yield from self.serialize_schema_block(table_data, schema_block) 
   
     def get_title(self, table_data, schema_block):
-        title = table_data['documentTitle'] + ' ' + self.tokenizer.sep_token + ' ' + schema_block['text'] + ' '
+        title = table_data['documentTitle'] + ' ; '
         return title
 
     def preprocess_schema_block(self, table_data, schema_block):
@@ -96,6 +97,8 @@ class SchemaSerializer(TableSerializer):
         self.preprocess_schema_block(table_data, schema_block)
         title = self.get_title(table_data, schema_block)
         self.serial_window.set_title(title)
+        self.serial_window.set_schema(schema_block['text'])
+
         yield from self.get_wnd_block(table_data, schema_block)
 
     def get_serial_rows(self, table_data, schema_block):

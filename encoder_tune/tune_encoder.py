@@ -17,6 +17,7 @@ import transformers
 import torch.nn as nn
 from serial_collator import SerialCollator
 from collections import OrderedDict
+import torch.nn.functional as F
 
 def load_emb(emb_file):
     p_id_lst = []
@@ -115,7 +116,7 @@ def train(args, train_cpr_p_id, dev_cpr_p_id, cpr_dict, cpr_emb_dict, base_emb_d
 
     learing_rate = 1e-3
     optimizer = optim.Adam(model.parameters(), lr=learing_rate)
-    loss_func = nn.MSELoss()
+    score_func = nn.MSELoss(reduction='none')
     metric_dict = {}
     max_epoch = 200
     for epoch in range(max_epoch):
@@ -136,7 +137,7 @@ def train(args, train_cpr_p_id, dev_cpr_p_id, cpr_dict, cpr_emb_dict, base_emb_d
 
             batch_cpr_emb = get_batch_emb(batch_cpr_p_id, cpr_emb_dict).to(args.device)
             updated_cpr_emb = model(cpr_text_ids, cpr_schema_ids, batch_cpr_emb)
-            batch_loss = calc_loss(args, loss_func, updated_cpr_emb, 
+            batch_loss = calc_loss(args, score_func, updated_cpr_emb, 
                                    train_cpr_p_id, cpr_dict, base_emb_dict)
             print(f'train epoch={epoch} loss={batch_loss.item()} {num_batch}/{total_batch}')
             optimizer.zero_grad()
@@ -164,7 +165,7 @@ def evaluate(args, epoch, model,
     with torch.no_grad():
         model.eval()
         total_loss = 0
-        loss_func = nn.MSELoss()
+        score_func = nn.MSELoss(reduction='none')
         count = 0
         for offset in range(0, len(dev_cpr_p_id), args.batch_size):
             num_batch += 1
@@ -178,7 +179,7 @@ def evaluate(args, epoch, model,
 
             batch_cpr_emb = get_batch_emb(batch_cpr_p_id, cpr_emb_dict).to(args.device)
             updated_cpr_emb = model(cpr_text_ids, cpr_schema_ids, batch_cpr_emb)
-            batch_loss = calc_loss(args, loss_func, updated_cpr_emb, 
+            batch_loss = calc_loss(args, score_func, updated_cpr_emb, 
                                    dev_cpr_p_id, cpr_dict, base_emb_dict)
             total_loss += batch_loss.item() * len(updated_cpr_emb)
             
@@ -204,19 +205,26 @@ def get_device(cuda):
     device = torch.device(("cuda:%d" % cuda) if torch.cuda.is_available() and cuda >=0 else "cpu")
     return device
 
-def calc_loss(args, loss_func, updated_cpr_emb, train_cpr_p_id, cpr_dict, base_emb_dict):
-    total_loss = 0
+def calc_loss(args, score_func, updated_cpr_emb, train_cpr_p_id, cpr_dict, base_emb_dict):
+    M = len(updated_cpr_emb)
+    score_lst = []
+    target_lst = []
     for offset, cpr_emb in enumerate(updated_cpr_emb):
         cpr_p_id = train_cpr_p_id[offset]
         base_p_id_lst = cpr_dict[cpr_p_id]['base_p_id_lst']
-        M = len(base_p_id_lst)
-        base_emb = get_batch_emb(base_p_id_lst, base_emb_dict).view(M, -1).to(args.device)
-        cpr_emb_expand = cpr_emb.view(1, -1).expand(M, -1)
-        loss = loss_func(cpr_emb_expand, base_emb)
-        total_loss += loss
-    batch_loss = total_loss / len(updated_cpr_emb)
-    return batch_loss
-        
+        sample_base_p_id = random.sample(base_p_id_lst, 1)[0]
+        query_emb = get_batch_emb([sample_base_p_id], base_emb_dict).view(1, -1).to(args.device)
+        query_emb_exapnd = query_emb.expand(M, -1)
+        score = - (score_func(query_emb_exapnd, updated_cpr_emb)).sum(dim=1)
+        score_lst.append(score.view(1, -1))
+        target_lst.append(offset)
+
+    batch_score = torch.cat(score_lst, dim=0)
+    batch_target = torch.tensor(target_lst).to(args.device)
+    softmax_scores = F.log_softmax(batch_score, dim=1)
+    loss = F.nll_loss(softmax_scores, batch_target, reduction="mean")
+    return loss
+
 def get_batch_emb(batch_p_id, emb_dict):
     emb_lst = [emb_dict[a]['emb'].view(1, -1) for a in batch_p_id]
     batch_emb = torch.cat(emb_lst, dim=0)
