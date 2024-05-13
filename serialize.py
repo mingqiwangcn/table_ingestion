@@ -128,6 +128,7 @@ def main():
                 if answer != 'y':
                     return
     
+    print(f'Serializing dataset {args.dataset} by strategy {args.strategy}')
     f_o = None
     f_o_cpr = None
     f_o_scm = None
