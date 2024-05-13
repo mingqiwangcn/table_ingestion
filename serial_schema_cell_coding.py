@@ -6,10 +6,6 @@ class SchemaCellCodingSerializer(CompressSerializer):
         super().__init__()
         self.schema_code_book = SchemaCodeBook(self.tokenizer)
 
-    def get_title(self, table_data, schema_block):
-        title = table_data['documentTitle'] + ' ' + self.tokenizer.sep_token + ' '
-        return title
-
     def process_before_pop(self):
         super().process_before_pop()
         special_token_lst = list(self.schema_code_book.special_token_dict.keys())

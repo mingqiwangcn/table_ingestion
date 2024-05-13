@@ -87,7 +87,7 @@ class SchemaSerializer(TableSerializer):
             yield from self.serialize_schema_block(table_data, schema_block) 
   
     def get_title(self, table_data, schema_block):
-        title = table_data['documentTitle'] + ' ; '
+        title = table_data['documentTitle'] + ' ' + self.tokenizer.sep_token + ' '
         return title
 
     def preprocess_schema_block(self, table_data, schema_block):
