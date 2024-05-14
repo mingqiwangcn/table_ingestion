@@ -24,7 +24,7 @@ def read_tables(args):
     return table_dict, table_number_map
 
 def read_questions(args, cpr_tab_no_map):
-    question_file = os.path.join(args.sample_dir, 'questions.jsonl')
+    question_file = os.path.join(args.strategy_dir, 'questions.jsonl')
     q_info_lst = []
     q_id = 0
     with open(question_file) as f:
@@ -65,7 +65,9 @@ def main():
     args = get_args()
     work_dir = os.path.dirname(os.getcwd())
     args.work_dir = work_dir
-    args.sample_dir = os.path.join(work_dir, 'output', args.dataset, args.strategy, 'samples')
+
+    args.strategy_dir = os.path.join(work_dir, 'output', args.dataset, args.strategy)
+    args.sample_dir = os.path.join(args.strategy_dir, 'samples')
 
     train_dir = os.path.join(args.sample_dir, 'train')
     if os.path.isdir(train_dir):

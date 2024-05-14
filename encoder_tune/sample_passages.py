@@ -63,7 +63,7 @@ def merge_passges(sample_file_pattern, f_o_cpr, f_o_base):
             f_o_cpr.write(json.dumps(passage_info) + '\n')
         
 def uncompress_passages(compressed_passages, args):
-    task_info_lst = [{'text':a, 'p_no':offset} for offset, a in enumerate(compressed_passages)]
+    task_info_lst = [{'text':a, 'table_number':offset} for offset, a in enumerate(compressed_passages)]
     
     num_workers = os.cpu_count()
     work_pool = ProcessPool(num_workers, initializer=init_worker, initargs=(args, ))
@@ -94,20 +94,20 @@ def get_schema_info(table_data):
 
 def process_passage(task_info):
     text = task_info['text']
-    p_no = task_info['p_no']
+    table_number = task_info['table_number']
     passage_info = json.loads(text)
-    passage_info['p_no'] = p_no
+    passage_info['table_number'] = table_number
     sample_table_data = set_full_serial(passage_info)
-    sample_table_data['p_no'] = p_no
+    sample_table_data['table_number'] = table_number
     
     schema_info = get_schema_info(sample_table_data)
     passage_info['schema_info'] = schema_info
 
-    out_file = os.path.join(g_opts.sample_passage_part_dir, f'part_{p_no}.jsonl')
+    out_file = os.path.join(g_opts.sample_passage_part_dir, f'part_{table_number}.jsonl')
     with open(out_file, 'w') as f_o:
         f_o.write(json.dumps(passage_info))
     
-    out_table_file = os.path.join(g_opts.sample_table_dir, f'table_{p_no}.jsonl')
+    out_table_file = os.path.join(g_opts.sample_table_dir, f'table_{table_number}.jsonl')
     with open(out_table_file, 'w') as f_o_table:
         f_o_table.write(json.dumps(sample_table_data))
 
