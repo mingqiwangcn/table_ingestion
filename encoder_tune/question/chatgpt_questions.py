@@ -18,7 +18,7 @@ class SqlOP:
 class ChatGptGenerator:
     def __init__(self, prompt_dir):
         self.buffer = []
-        self.q_size_per_table = 6
+        self.q_size_per_table = 10
         self.prompt_method = 'general'
         self.token_encoding = tiktoken.encoding_for_model(gpt.MODEL_NAME)
         #self.max_caption_size = util.Max_Title_Size 
@@ -140,7 +140,6 @@ class ChatGptGenerator:
             sql = select_part_sql + ' where ' + where_part_sql
             meta = {
                 'table_id':table_data['tableId'],
-                'table_number':table_data['table_number'],
                 'title':table_data['documentTitle'],
                 'row':row,
                 'sel_col':sel_col,
@@ -179,7 +178,20 @@ class ChatGptGenerator:
             where_sql = f"{col_name} = '{cell_text}'"
         return where_sql
     
+    def sample_col_data(self, table_data):
+        col_data = table_data['columns']
+        col_lst = list(range(len(col_data)))
+        M = min(len(col_lst[5:]), 30)
+        sample_cols = col_lst[:5] + random.sample(col_lst[5:], M)
+        row_data = table_data['rows']
+        table_data['columns'] = [col_data[a] for a in sample_cols]
+        for row_item in row_data:
+            cell_data = row_item['cells']
+            row_item['cells'] = [cell_data[a] for a in sample_cols]
+
     def sql_lst_prompts(self, prompt, table_data):
+        if len(table_data['columns']) > 35:
+            self.sample_col_data(table_data)
         sql_info_lst = self.sample_sql(table_data, sample_size=self.q_size_per_table) 
         prompt_sql_info_lst = [] 
         row_data = table_data['rows']
@@ -265,11 +277,18 @@ class ChatGptGenerator:
         question_lst = []
         out_text_lst = response.split('\n')
         tag = 'Paraphrased(Begin Tag):'
+        row_offset = 0
         for line in out_text_lst:
             offset = line.find(tag)
             if offset < 0:
                 continue
             pos = offset + len(tag)
             question = line[pos:].strip()
-            question_lst.append(question)
+            q_info = {
+                'question':question,
+                'sql':info_lst[row_offset]['prompt'],
+                'row':info_lst[row_offset]['meta']['row']
+            }
+            row_offset += 1
+            question_lst.append(q_info)
         return question_lst
