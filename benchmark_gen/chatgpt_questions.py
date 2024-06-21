@@ -20,7 +20,7 @@ class ChatGptGenerator:
     def __init__(self, prompt_dir):
         self.buffer = []
         self.q_size_per_table = 10
-        self.prompt_method = 'general'
+        self.prompt_method = 'template_2'
         self.token_encoding = tiktoken.encoding_for_model(gpt.MODEL_NAME)
         #self.max_caption_size = util.Max_Title_Size 
         #self.max_col_size = util.Max_Col_Header_Size
@@ -75,12 +75,21 @@ class ChatGptGenerator:
     
         num_tokens += 3  # every reply is primed with <|start|>assistant<|message|>
         self.num_meta_tokens = num_tokens
-       
+    
+    def get_prompt_cols(self, table_data):
+        prompt_cols = table_data['prompt_cols']
+        return prompt_cols
+    
+    def get_prompt_rows(self, table_data):
+        prompt_rows = table_data['prompt_rows']
+        return prompt_rows
+
     def get_col_header_prompt(self, table_data):
         col_data = table_data['columns']
-        text_lst = [a['text'] for a in col_data] 
+        prompt_cols = self.get_prompt_cols(table_data)
+        text_lst = [col_data[col]['text'] for col in prompt_cols] 
         header_prompt = '\t'.join(text_lst)
-        return header_prompt 
+        return header_prompt
             
     def col_data_complete(self, row_item, col_lst):
         for col in col_lst:
@@ -95,9 +104,9 @@ class ChatGptGenerator:
     def sample_sql(self, table_data, sample_size):
         table_caption = table_data['documentTitle'].strip()
         row_data = table_data['rows']
-        row_lst = list(range(len(row_data)))
+        row_lst = self.get_prompt_rows(table_data)
         col_data = table_data['columns']
-        col_lst = list(range(len(col_data)))
+        col_lst = self.get_prompt_cols(table_data)
         aggr_op_lst_general = [None, 'count']
         aggr_op_lst_numeric = [None, 'count', 'max', 'min', 'avg', 'sum']
         num_sql_col_lst = [2, 3]
@@ -139,7 +148,7 @@ class ChatGptGenerator:
                     where_part_sql += ' and '
             
             if table_caption != '' and self.use_table_caption():
-                 where_part_sql += ' Table Context = ' + table_caption
+                 where_part_sql += ' and Table Context = ' + table_caption
 
             sql = select_part_sql + ' where ' + where_part_sql
             meta = {
@@ -182,117 +191,133 @@ class ChatGptGenerator:
             where_sql = f"{col_name} = '{cell_text}'"
         return where_sql
     
-    def sample_col_data(self, table_data):
+    def sample_prompt_data(self, table_data):
         col_data = table_data['columns']
         col_lst = list(range(len(col_data)))
-        M = min(len(col_lst[5:]), 30)
-        sample_cols = col_lst[:5] + random.sample(col_lst[5:], M)
-        row_data = table_data['rows']
-        table_data['columns'] = [col_data[a] for a in sample_cols]
-        for row_item in row_data:
-            cell_data = row_item['cells']
-            row_item['cells'] = [cell_data[a] for a in sample_cols]
+        M = 50
+        if len(col_lst) > M:
+            Num_First = 5
+            sample_cols = col_lst[:Num_First] + random.sample(col_lst[Num_First:], M - Num_First)
+        else:
+            sample_cols = col_lst
+        table_data['prompt_cols'] = sample_cols
+        row_lst = list(range(len(table_data['rows'])))
+        N = 10
+        if len(row_lst) > N:
+            sample_rows = random.sample(row_lst, N)
+        else:
+            sample_rows = row_lst
+        table_data['prompt_rows'] = sample_rows
 
-    def sql_lst_prompts(self, prompt, table_data):
-        if len(table_data['columns']) > 35:
-            self.sample_col_data(table_data)
-        sql_info_lst = self.sample_sql(table_data, sample_size=self.q_size_per_table) 
-        prompt_sql_info_lst = [] 
+    def get_row_prompts(self, table_data):
+        prompt_lst = []
         row_data = table_data['rows']
+        prompt_cols = self.get_prompt_cols(table_data)
+        prompt_rows = self.get_prompt_rows(table_data)
+        for row in prompt_rows:
+            row_item = row_data[row]
+            cell_lst = row_item['cells'] 
+            row_prompt = '\n' + '\t'.join([cell_lst[a]['text'] for a in prompt_cols])
+            prompt_lst.append(row_prompt)
+        return prompt_lst
+
+    def get_selected_prompts(self, table_data):
+        item_lst = []
+        prompt_cols = self.get_prompt_cols(table_data)
+        col_date = table_data['columns']
+        seq = 0
+        for _ in range(self.q_size_per_table):
+            seq += 1
+            query_col = random.sample(prompt_cols, 1)[0]
+            col_name = col_date[query_col]['text']
+            item_prompt = f'\n{seq}. query column : {col_name}'
+
+            other_cols = [a for a in prompt_cols if a != query_col]
+            M = min(random.sample([0, 1, 2], 1)[0], len(other_cols))
+            if M > 0:
+                item_prompt += ' ; '
+                col_data = table_data['columns']
+                use_specific_row = random.sample([0, 1], 1)[0]
+                filter_columns = random.sample(other_cols, M)
+                if use_specific_row:
+                    row_data = table_data['rows']
+                    prompt_rows = self.get_prompt_rows(table_data)
+                    sample_row = random.sample(prompt_rows, 1)[0]
+                    row_cells = row_data[sample_row]['cells']
+                    
+                    for col in filter_columns:
+                        col_name = col_data[col]['text'] 
+                        cell_text = row_cells[col]['text']
+                        filter_prompt = f'filter column/value : f{col_name}/f{cell_text} ; '
+                        item_prompt += ' ' + filter_prompt
+                else:
+                    for col in filter_columns:
+                        col_name = col_data[col]['text']
+                        item_prompt += f'filter column:{col_name}'
+            
+            
+            use_aggr = random.sample([0, 1], 1)[0]
+            if use_aggr:
+                item_prompt += ' ; use aggregation for query column'
+            else:
+                item_prompt += ' ; find specific values for query column'
+            item_lst.append(item_prompt)
+        return item_lst
+
+    def get_sql_prompts(self, table_data):
+        util.infer_col_type(table_data,
+                            infer_cols=self.get_prompt_cols(table_data), 
+                            infer_rows=self.get_prompt_rows(table_data)
+                            )
+        sql_info_lst = self.sample_sql(table_data, sample_size=self.q_size_per_table) 
+        prompt_sql_info_lst = [] # may exceed size limit, so use another list
+        row_data = table_data['rows']
+        prompt_cols = self.get_prompt_cols(table_data)
         for sql_offset, sql_info in enumerate(sql_info_lst):
             sql_no = sql_offset + 1
-            sample_row_idx = sql_info['meta']['row'] 
-            sample_row_item = row_data[sample_row_idx]
-            cell_lst = sample_row_item['cells'] 
-            row_prompt = '\t'.join([a['text'] for a in cell_lst])
-            
-            #also need to consider the SQL following
             sql_text = sql_info['sql']
             sql_prompt = f'\n{sql_no} {sql_text}' 
-            
-            prompt += f'\n{sql_no}\t' + row_prompt
-            sql_info['prompt'] = sql_prompt
+            sql_info['sql_prompt'] = sql_prompt
             prompt_sql_info_lst.append(sql_info)
         
-        return prompt, prompt_sql_info_lst
-    
-    def cell_lst_prompts(self, prompt, table_data, num_tokens):
-        sample_col_row_lst = []
-        row_data = table_data['rows']
-        col_data = table_data['columns']
-        row_lst = list(range(len(row_data)))
-        col_lst = list(range(len(col_data)))
-
-        for n_question in range(self.q_size_per_table):
-            num_col_lst = [1, 2, 3]
-            if max(num_col_lst) > len(col_lst):
-                num_col_lst = [2]
-            num_col_sample = random.sample(num_col_lst, 1)[0]
-            sel_cols = random.sample(col_lst, num_col_sample)
-            sel_col_name = [col_data[a]['gpt_text'] for a in sel_cols]
-            
-            row = random.sample(row_lst, 1)[0] 
-            row_item = row_data[row]
-            cell_lst = row_item['cells']
-            row_prompt = '\t'.join([a['gpt_text'] for a in cell_lst])
-            
-            row_size = len(self.token_encoding.encode(row_prompt))
-
-            if num_tokens + row_size  <= self.ctx_size:
-                prompt += f'\n{n_question+1}\t' + row_prompt
-                meta = {
-                    'table_id':table_data['tableId'],
-                    'title':table_data['documentTitle'],
-                    'row':row,
-                    'sel_col':sel_cols,
-                    'sel_col_name':sel_col_name,
-                }
-                col_row_info = {'id':str(uuid.uuid4()), 'meta':meta, 'prompt': \
-                                f'\n{n_question+1}. Column: {sel_col_name}, Row: {n_question+1}'} 
-                sample_col_row_lst.append(col_row_info)
-        return prompt, sample_col_row_lst 
+        return prompt_sql_info_lst
 
     def get_table_prompt(self, start_prompt, table_data):
+        self.sample_prompt_data(table_data)
         prompt = start_prompt
         #Add table caption
         prompt += '\n' + self.prompt_caption_tag + '\n' + table_data['documentTitle']
         #Add cell data tag
         prompt += '\n' + self.prompt_cell_tag
         #Add col headers
+        
         header_prompt = self.get_col_header_prompt(table_data)
         prompt += '\n' + header_prompt
-        util.infer_col_type(table_data)
-        #if self.prompt_method == 'general':
-        prompt, prompt_lst = self.sql_lst_prompts(prompt, table_data)
-        prompt += self.prompt_sql_tag
-        #else: 
-            #prompt, prompt_lst = self.cell_lst_prompts(prompt, table_data, num_tokens)
-            #prompt += self.prompt_col_row_tag
+        row_prompt_lst = self.get_row_prompts(table_data)
+        for row_prompt in row_prompt_lst:
+            prompt += row_prompt
 
-        for sample_prompt in prompt_lst:
-            prompt += sample_prompt['prompt']
-        return prompt, prompt_lst
-    
+        item_lst = self.get_selected_prompts(table_data)
+        for item in item_lst:
+            prompt += item
+        
+        prompt += '\noutput questions:\n'
+        '''
+        prompt += self.prompt_sql_tag
+        sql_info_lst = self.get_sql_prompts(table_data)
+        for sql_info in sql_info_lst:
+            prompt += sql_info['sql_prompt']
+        return prompt, sql_info_lst
+        '''
+        return prompt
+
     def generate_questions(self, table_data):
         start_prompt = self.start_prompt_lst[0]
-        table_prompt, info_lst = self.get_table_prompt(start_prompt, table_data)
+        table_prompt = self.get_table_prompt(start_prompt, table_data)
         self.messages[-1]['content'] = table_prompt
         response = gpt.chat_complete(self.client, self.messages)
         question_lst = []
         out_text_lst = response.split('\n')
-        tag = 'Paraphrased(Begin Tag):'
-        row_offset = 0
         for line in out_text_lst:
-            offset = line.find(tag)
-            if offset < 0:
-                continue
-            pos = offset + len(tag)
-            question = line[pos:].strip()
-            q_info = {
-                'question':question,
-                'sql':info_lst[row_offset]['prompt'],
-                'row':info_lst[row_offset]['meta']['row']
-            }
-            row_offset += 1
-            question_lst.append(q_info)
+            question_lst.append(line)
         return question_lst

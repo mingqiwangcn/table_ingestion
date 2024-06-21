@@ -25,9 +25,6 @@ def read_tables(args):
         with open(table_file) as f:
             for line in f:
                 table_data = json.loads(line)
-                if len(table_data['rows']) == 0:
-                    import pdb; pdb.set_trace()
-                    print('rows 0')
                 util.preprocess_schema(tokenizer, table_data)
                 table_id = table_data['tableId']
                 table_dict[table_id] = table_data
@@ -66,7 +63,7 @@ def main():
             table_data = table_dict[table_id]
             question_lst = generator.generate_questions(table_data)
             for q_info in question_lst:
-                q_info['file_name'] = table_data['tableId']
+                #q_info['file_name'] = table_data['tableId']
                 f_o.write(json.dumps(q_info) + '\n')
             
             pbar.update(len(question_lst))

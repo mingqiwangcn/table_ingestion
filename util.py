@@ -186,16 +186,29 @@ def is_prime(N):
             return False
     return True
 
-def infer_col_type(table_data):
+def infer_col_type(table_data, infer_cols=None, infer_rows=None):
     col_data = table_data['columns']
     row_data = table_data['rows']
-    for col, col_info in enumerate(col_data):
+
+    if infer_cols is None:
+        cols_used = list(range(len(col_data)))
+    else:
+        cols_used = infer_cols
+    
+    if infer_rows is None:
+        rows_used = list(range(len(row_data)))
+    else:
+        rows_used = infer_rows
+
+    for col in cols_used:
+        col_info = col_data[col]
         type_lst = []
         bool_count = 0
         int_count = 0
         float_count = 0
         polygon_count = 0
-        for row_item in row_data:
+        for row in rows_used:
+            row_item = row_data[row]
             if (bool_count >= 3) or (int_count >= 3) or (float_count >= 3) or (polygon_count >= 1):
                 break
             cell_info = row_item['cells'][col]
