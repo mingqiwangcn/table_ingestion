@@ -8,6 +8,7 @@ import util
 import gpt
 from openai import OpenAI
 import uuid
+from datetime import datetime
 
 class SqlOP:
     eq = '=',
@@ -34,7 +35,10 @@ class ChatGptGenerator:
         if api_key is None:
             raise ValueError('Need to set environment variable OPENAI_API_KEY')
         self.client = OpenAI(api_key=api_key)
-        log_file = os.path.join(prompt_dir, 'log.txt')
+
+        now_t = str(datetime.now())
+        log_name = 'log_' + '_'.join(now_t.split()) + '.txt'
+        log_file = os.path.join(prompt_dir, log_name)
         f_log = open(log_file, 'a')
         gpt.set_logger(f_log)
         self.sql_op_lst = [SqlOP.eq, SqlOP.greater, SqlOP.less, SqlOP.between]
@@ -270,8 +274,8 @@ class ChatGptGenerator:
         return prompt, prompt_lst
     
     def generate_questions(self, table_data):
-        statr_prompt = self.start_prompt_lst[0]
-        table_prompt, info_lst = self.get_table_prompt(statr_prompt, table_data)
+        start_prompt = self.start_prompt_lst[0]
+        table_prompt, info_lst = self.get_table_prompt(start_prompt, table_data)
         self.messages[-1]['content'] = table_prompt
         response = gpt.chat_complete(self.client, self.messages)
         question_lst = []

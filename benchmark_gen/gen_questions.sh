@@ -1,8 +1,9 @@
-if [ "$#" -ne 2 ]; then
-    echo "Usage: ./gen_questions.sh <dataset> <strategy>"
+if [ "$#" -ne 1 ]; then
+    echo "Usage: ./gen_questions.sh <dataset>"
     exit
 fi
-export PYTHONPATH=~/code/table_project/table_ingestion
+export PYTHONPATH=~/code/solo_work/table_ingestion
 python generate.py \
+    --work_dir ~/code/solo_work \
     --dataset $1 \
-    --strategy $2
+    

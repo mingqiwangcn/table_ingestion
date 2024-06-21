@@ -23,7 +23,12 @@ def main():
     for table_name in tqdm(table_lst):
         sql = 'SELECT * FROM ' + table_name + ' LIMIT 10000'
         df = pd.read_sql(sql, con=conn)
-        out_file = os.path.join(out_dir, table_name + '.csv')
+        row_count = df.shape[0]
+        if row_count == 0:
+            continue
+        
+        file_name = ' '.join(table_name.split('_'))
+        out_file = os.path.join(out_dir, file_name + '.csv')
         df.to_csv(out_file, index=False)
 
     print('output to ' + out_dir)
