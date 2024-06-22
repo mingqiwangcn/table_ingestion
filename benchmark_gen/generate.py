@@ -25,6 +25,8 @@ def read_tables(args):
         with open(table_file) as f:
             for line in f:
                 table_data = json.loads(line)
+                if table_data['documentTitle'] != 'irac classification':
+                    continue
                 util.preprocess_schema(tokenizer, table_data)
                 table_id = table_data['tableId']
                 table_dict[table_id] = table_data

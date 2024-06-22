@@ -1,6 +1,0 @@
-You are given a table and SQL statments from it. 
-Instructions:
-1) Translate each SQL to natural language question
-2) Paraphrase each question 
-3) Each output should be in the following format
-{Question No.} ; Translated:{Translated Question} ; Paraphrased(Begin Tag):{Paraphrased Question}
