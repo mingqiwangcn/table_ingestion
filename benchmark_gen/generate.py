@@ -26,10 +26,12 @@ def read_tables(args):
             for line in f:
                 table_data = json.loads(line)
                 if table_data['documentTitle'] != 'irac classification':
-                    continue
+                    continue                
                 util.preprocess_schema(tokenizer, table_data)
                 table_id = table_data['tableId']
                 table_dict[table_id] = table_data
+        if len(table_dict) > 20:
+            break
     return table_dict
 
 def read_state(state_file):
@@ -62,6 +64,7 @@ def main():
     with open(out_question_file, 'w') as f_o:
         while True:
             table_id = random.sample(table_id_lst, 1)[0]
+            print('table ' + table_id + '  ' + table_dict[table_id]['documentTitle'])
             table_data = table_dict[table_id]
             question_lst = generator.generate_questions(table_data)
             for q_info in question_lst:

@@ -342,6 +342,8 @@ class ChatGptGenerator:
         if len(copied_sql_info_lst) > 0:
             self.rewrite_question_copied_text(table_prompt, copied_sql_info_lst)
         
+        self.cycle_check(table_prompt, sql_info_lst)
+
         with open(sql_info_file, 'w') as f_o:
             for sql_info in sql_info_lst:
                 f_o.write(json.dumps(sql_info) + '\n')
@@ -395,6 +397,26 @@ class ChatGptGenerator:
                     copied_cell_lst.append(cell_value)
         
         return copied_col_lst, copied_cell_lst
+
+    def cycle_check(self, table_prompt, sql_info_lst):
+        prompt = self.read_prompt('cycle_check')
+        prompt += '\n' + table_prompt
+        prompt += '\n' + 'Questions:'
+        seq_no = 0
+        for sql_info in sql_info_lst:
+            question_no_copy = sql_info.get('question_no_copy', None)
+            if question_no_copy is not None:
+                q_text = question_no_copy
+            else:
+                q_text = sql_info['question']
+            seq_no += 1
+            prompt += f'\n{seq_no}. ' + q_text
+        prompt += '\nOutput SQLs'
+        self.messages[-1]['content'] = prompt
+        response = gpt.chat_complete(self.client, self.messages)
+        out_text_lst = response.split('\n')
+        import pdb; pdb.set_trace()
+        print('ok')
 
     def sql_to_question(self, sql2quest_prompt, sql_info_lst):
         self.messages[-1]['content'] = sql2quest_prompt
