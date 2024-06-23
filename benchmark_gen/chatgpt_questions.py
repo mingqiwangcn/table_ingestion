@@ -133,11 +133,16 @@ class ChatGptGenerator:
                select_part_sql = f'select {aggr_op}({sel_col_name}) '
 
             where_part_sql = ''
+            cond_info_lst = []
             for offset, w_col in enumerate(where_cols):
                 w_col_name = where_col_names[offset]
                 col_cell_text = row_item['cells'][w_col]['text']
                 col_type = col_data[w_col].get('infer_type', None)
-                where_part_sql += self.get_where_sql(w_col_name, col_type, col_cell_text) 
+                cond_sql, cond_info = self.get_where_sql(w_col_name, col_type, col_cell_text)
+                cond_info['col'] = w_col
+                cond_info_lst.append(cond_info)
+                where_part_sql += cond_sql
+                 
                 if offset < (len(where_cols) - 1):
                     where_part_sql += ' and '
             
@@ -145,14 +150,13 @@ class ChatGptGenerator:
                  where_part_sql += ' and Table Context = ' + table_caption
 
             sql = select_part_sql + ' where ' + where_part_sql
+            sel_info = {'col':sel_col, 'col_name':sel_col_name}
             meta = {
                 'table_id':table_data['tableId'],
                 'title':table_data['documentTitle'],
                 'row':row,
-                'sel_col':sel_col,
-                'sel_col_name':sel_col_name,
-                'where_cols':where_cols,
-                'where_col_names':where_col_names
+                'sel_info':sel_info,
+                'cond_info':cond_info_lst
             }
             sql_info = {'id':str(uuid.uuid4()), 'sql':sql, 'meta':meta}
             sql_info_lst.append(sql_info)
@@ -160,6 +164,7 @@ class ChatGptGenerator:
         return sql_info_lst
 
     def get_where_sql(self, col_name, col_type, cell_text):
+        threshold = None
         if util.is_float(cell_text) and (col_type in [util.CellDataType.INT, util.CellDataType.FLOAT]):
             op = random.sample(self.sql_op_lst, 1)[0] 
             cell_value = float(cell_text)
@@ -183,7 +188,11 @@ class ChatGptGenerator:
                 where_sql = f'{col_name} {op} {cell_value}'
         else:
             where_sql = f"{col_name} = '{cell_text}'"
-        return where_sql
+            op = SqlOP.eq
+        
+        cond_info = {'col':None, 'col_name':col_name, 'op':op,  
+                     'cell_text':cell_text, 'threshold':threshold}
+        return where_sql, cond_info
     
     def sample_prompt_data(self, table_data):
         col_data = table_data['columns']
@@ -312,13 +321,81 @@ class ChatGptGenerator:
         self.sql_to_question(sql2quest_prompt, sql_info_lst)
         
         sql_info_file = os.path.join(self.prompt_dir, 'sql_info.jsonl')
+        
+        copied_seq_no = 0
+        copied_sql_info_lst = []
+        
+        for sql_info in sql_info_lst:
+            question = sql_info['question']
+            copied_col_lst, copied_cell_lst = self.check_copy_text(sql_info)
+            copied_text_lst = copied_col_lst + copied_cell_lst
+            if len(copied_text_lst) == 0:
+                continue
+            copied_seq_no += 1
+            no_copy_prompt = f'\n{copied_seq_no}. rewrite question ` {question} ` by replacing '
+            for copied_text in copied_text_lst:
+                no_copy_prompt += copied_text + ' ,'
+            no_copy_prompt = no_copy_prompt[:-1] + ' with other synonyms.'
+            sql_info['no_copy_prompt'] = no_copy_prompt
+            copied_sql_info_lst.append(sql_info)
+        
+        if len(copied_sql_info_lst) > 0:
+            self.rewrite_question_copied_text(table_prompt, copied_sql_info_lst)
+        
         with open(sql_info_file, 'w') as f_o:
             for sql_info in sql_info_lst:
                 f_o.write(json.dumps(sql_info) + '\n')
         
-        import pdb; pdb.set_trace()
-        print('ok')
+        return []
     
+    def rewrite_question_copied_text(self, table_prompt, copied_sql_info_lst):
+        prompt = self.read_prompt('no_copy_text')
+        prompt += '\n' + table_prompt
+        for sql_info in copied_sql_info_lst:
+            no_copy_prompt = sql_info['no_copy_prompt']
+            prompt += no_copy_prompt
+        
+        self.messages[-1]['content'] = prompt
+        response = gpt.chat_complete(self.client, self.messages)
+        out_text_lst = response.split('\n')
+        for offset, line in enumerate(out_text_lst):
+            pos = line.find('.')
+            if pos < 0:
+                continue
+            q_no = int(line[:pos])
+            if q_no != (offset + 1):
+                continue
+            
+            q_text = line[pos+1:]
+            sql_info = copied_sql_info_lst[offset]
+            sql_info['question_no_copy'] = q_text
+        
+    def check_copy_text(self, sql_info):
+        question = sql_info['question']
+        meta_info = sql_info['meta']
+        sel_col_name = meta_info['sel_info']['col_name']
+        cond_info_lst = meta_info['cond_info']
+        cond_col_name_lst = [a['col_name'] for a in cond_info_lst]
+        col_name_lst = [sel_col_name] + cond_col_name_lst
+
+        question_norm = util.norm_text(question)
+        copied_col_lst = []
+        for col_name in col_name_lst:
+            col_name_norm = util.norm_text(col_name) 
+            if col_name_norm in question_norm:
+                copied_col_lst.append(col_name)
+        
+        copied_cell_lst = []
+        cell_value_lst = [a['cell_text'] for a in cond_info_lst if a['op'] == '=']
+        for cell_value in cell_value_lst:
+            word_lst = cell_value.split()
+            if len(word_lst) >= 2:
+                cell_value_norm = util.norm_text(cell_value)
+                if cell_value_norm in question_norm:
+                    copied_cell_lst.append(cell_value)
+        
+        return copied_col_lst, copied_cell_lst
+
     def sql_to_question(self, sql2quest_prompt, sql_info_lst):
         self.messages[-1]['content'] = sql2quest_prompt
         response = gpt.chat_complete(self.client, self.messages)

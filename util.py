@@ -267,3 +267,6 @@ def set_packing(set_lst):
         if not over_lapped:
             pd_set_lst.append(set_item)
     return pd_set_lst
+
+def norm_text(text):
+    return text.strip().lower()
