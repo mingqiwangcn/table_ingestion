@@ -164,7 +164,9 @@ class ChatGptGenerator:
         return sql_info_lst
 
     def get_where_sql(self, col_name, col_type, cell_text):
-        threshold = None
+        cond_info = {'col':None, 'col_name':col_name, 'op':None,  
+                     'value_1':None, 'value_1':None}
+
         if util.is_float(cell_text) and (col_type in [util.CellDataType.INT, util.CellDataType.FLOAT]):
             op = random.sample(self.sql_op_lst, 1)[0] 
             cell_value = float(cell_text)
@@ -176,22 +178,31 @@ class ChatGptGenerator:
                 threshold = threshold_float
             if op == SqlOP.greater:
                 rel_value = cell_value - threshold
-                where_sql = f'{col_name} {op} {threshold}'
+                where_sql = f'{col_name} {op} {rel_value}'
+                cond_info['op'] = op
+                cond_info['value'] = rel_value
             elif op == SqlOP.less:
                 ref_value = cell_value + threshold
-                where_sql = f'{col_name} {op} {threshold}'
+                where_sql = f'{col_name} {op} {ref_value}'
+                cond_info['op'] = op
+                cond_info['value'] = rel_value
             elif op == SqlOP.between:
                 ref_value_1 = cell_value - threshold
                 ref_value_2 = cell_value + threshold
                 where_sql = f'{col_name} between {ref_value_1} and {ref_value_2}'
+                cond_info['op'] = op
+                cond_info['value_1'] = ref_value_1
+                cond_info['value_2'] = ref_value_2
             else:
                 where_sql = f'{col_name} {op} {cell_value}'
+                cond_info['op'] = op
+                cond_info['value'] = cell_value
         else:
             where_sql = f"{col_name} = '{cell_text}'"
             op = SqlOP.eq
+            cond_info['op'] = op
+            cond_info['value'] = cell_text
         
-        cond_info = {'col':None, 'col_name':col_name, 'op':op,  
-                     'cell_text':cell_text, 'threshold':threshold}
         return where_sql, cond_info
     
     def sample_prompt_data(self, table_data):
@@ -360,16 +371,13 @@ class ChatGptGenerator:
         self.messages[-1]['content'] = prompt
         response = gpt.chat_complete(self.client, self.messages)
         out_text_lst = response.split('\n')
-        for offset, line in enumerate(out_text_lst):
+        for line in out_text_lst:
             pos = line.find('.')
             if pos < 0:
                 continue
             q_no = int(line[:pos])
-            if q_no != (offset + 1):
-                continue
-            
             q_text = line[pos+1:]
-            sql_info = copied_sql_info_lst[offset]
+            sql_info = copied_sql_info_lst[q_no - 1]
             sql_info['question_no_copy'] = q_text
         
     def check_copy_text(self, sql_info):
@@ -415,23 +423,49 @@ class ChatGptGenerator:
         self.messages[-1]['content'] = prompt
         response = gpt.chat_complete(self.client, self.messages)
         out_text_lst = response.split('\n')
-        import pdb; pdb.set_trace()
-        print('ok')
+        tag = 'JSON of SQL:'
+        good_sql_info_lst = []
+        for line in out_text_lst:
+            q_no_pos = line.find('|')
+            if q_no_pos < 0:
+                continue
+            q_no = int(line[:q_no_pos])
+            tag_pos = line.find(tag)
+            if tag_pos < 0:
+                continue
+            pos = tag_pos + len(tag)
+            meta_text = line[pos:]
+            try:
+                back_meta_info = json.loads(meta_text)
+            except:
+                continue
+            sql_info = sql_info_lst[q_no - 1]
+            sql_info['back_meta'] = back_meta_info
+            sql_meta_info = sql_info['meta']
+            import pdb; pdb.set_trace()
+            consistent = self.compare_sql_meta(sql_meta_info, back_meta_info)
+            if consistent:
+                good_sql_info_lst.append(sql_info)
+    
+    def compare_sql_meta(self, sql_meta_info, back_meta_info):
+
+        return True
 
     def sql_to_question(self, sql2quest_prompt, sql_info_lst):
         self.messages[-1]['content'] = sql2quest_prompt
         response = gpt.chat_complete(self.client, self.messages)
         out_text_lst = response.split('\n')
         tag = 'Paraphrased(Begin Tag):'
-        for offset, line in enumerate(out_text_lst):
+        for line in out_text_lst:
             quest_pos = line.find(tag)
             if quest_pos < 0:
                 continue
             q_no_pos = line.find('|')
+            if q_no_pos < 0:
+                continue 
             q_no = int(line[:q_no_pos])
-            if q_no != (offset + 1):
-                continue
+            
             pos = quest_pos + len(tag)
             question = line[pos:].strip()
-            sql_info = sql_info_lst[offset]
+            sql_info = sql_info_lst[q_no - 1]
             sql_info['question'] = question
