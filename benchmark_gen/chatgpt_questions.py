@@ -11,9 +11,9 @@ import uuid
 from datetime import datetime
 
 class SqlOP:
-    eq = '=',
-    greater = '>',
-    less = '<',
+    eq = '='
+    greater = '>'
+    less = '<'
     between = 'between and'
 
 class ChatGptGenerator:
@@ -165,10 +165,10 @@ class ChatGptGenerator:
 
     def get_where_sql(self, col_name, col_type, cell_text):
         cond_info = {'col':None, 'col_name':col_name, 'op':None,  
-                     'value_1':None, 'value_1':None}
+                     'value':None}
 
         if util.is_float(cell_text) and (col_type in [util.CellDataType.INT, util.CellDataType.FLOAT]):
-            op = random.sample(self.sql_op_lst, 1)[0] 
+            op = random.sample(self.sql_op_lst, 1)[0]
             cell_value = float(cell_text)
             threshold_int = random.sample(list(range(10)), 1)[0]
             threshold_float = threshold_int / 10
@@ -191,7 +191,7 @@ class ChatGptGenerator:
                 ref_value_2 = cell_value + threshold
                 where_sql = f'{col_name} between {ref_value_1} and {ref_value_2}'
                 cond_info['op'] = op
-                cond_info['value_1'] = ref_value_1
+                cond_info['value'] = ref_value_1
                 cond_info['value_2'] = ref_value_2
             else:
                 where_sql = f'{col_name} {op} {cell_value}'
@@ -327,11 +327,15 @@ class ChatGptGenerator:
             sql2quest_prompt += sql_info['sql_prompt']
         return sql2quest_prompt, table_prompt, sql_info_lst
 
+    def write_sql_log(self, sql_info_lst):
+        sql_info_file = os.path.join(self.prompt_dir, 'sql_info.jsonl')
+        with open(sql_info_file, 'w') as f_o:
+            for sql_info in sql_info_lst:
+                f_o.write(json.dumps(sql_info) + '\n')
+
     def generate_questions(self, table_data): 
         sql2quest_prompt, table_prompt, sql_info_lst = self.prompt_sql_to_question(table_data)
         self.sql_to_question(sql2quest_prompt, sql_info_lst)
-        
-        sql_info_file = os.path.join(self.prompt_dir, 'sql_info.jsonl')
         
         copied_seq_no = 0
         copied_sql_info_lst = []
@@ -354,10 +358,12 @@ class ChatGptGenerator:
             self.rewrite_question_copied_text(table_prompt, copied_sql_info_lst)
         
         self.cycle_check(table_prompt, sql_info_lst)
+        self.write_sql_log(sql_info_lst)
 
-        with open(sql_info_file, 'w') as f_o:
-            for sql_info in sql_info_lst:
-                f_o.write(json.dumps(sql_info) + '\n')
+        good_count = len([a for a in sql_info_lst if a['consistent']])
+        print('good_count=', good_count)
+        import pdb; pdb.set_trace()
+        print('ok')
         
         return []
     
@@ -396,7 +402,7 @@ class ChatGptGenerator:
                 copied_col_lst.append(col_name)
         
         copied_cell_lst = []
-        cell_value_lst = [a['cell_text'] for a in cond_info_lst if a['op'] == '=']
+        cell_value_lst = [a['value'] for a in cond_info_lst if a['op'] == '=']
         for cell_value in cell_value_lst:
             word_lst = cell_value.split()
             if len(word_lst) >= 2:
@@ -424,12 +430,16 @@ class ChatGptGenerator:
         response = gpt.chat_complete(self.client, self.messages)
         out_text_lst = response.split('\n')
         tag = 'JSON of SQL:'
-        good_sql_info_lst = []
         for line in out_text_lst:
             q_no_pos = line.find('|')
             if q_no_pos < 0:
                 continue
-            q_no = int(line[:q_no_pos])
+            try:
+                q_no = int(line[:q_no_pos])
+            except:
+                import pdb; pdb.set_trace()
+                print('err')
+
             tag_pos = line.find(tag)
             if tag_pos < 0:
                 continue
@@ -438,16 +448,39 @@ class ChatGptGenerator:
             try:
                 back_meta_info = json.loads(meta_text)
             except:
+                print('JSON of SQL is not correct in syntax : ' + meta_text)
                 continue
             sql_info = sql_info_lst[q_no - 1]
             sql_info['back_meta'] = back_meta_info
             sql_meta_info = sql_info['meta']
-            import pdb; pdb.set_trace()
             consistent = self.compare_sql_meta(sql_meta_info, back_meta_info)
-            if consistent:
-                good_sql_info_lst.append(sql_info)
-    
+            sql_info['consistent'] = consistent
+
+    def get_back_where_columns(self, back_meta_info, max_count=5):
+        column_lst = []
+        for i in range(max_count):
+            column_info = back_meta_info.get('where column ' + str(i), None)
+            if column_info is not None:
+                column_lst.append(util.norm_text(column_info['name']))
+        return column_lst
+
     def compare_sql_meta(self, sql_meta_info, back_meta_info):
+        text_1 = util.norm_text(sql_meta_info['sel_info']['col_name'])
+        back_sel_col_name = back_meta_info['select column']
+        if back_sel_col_name is None:
+            text_2 = ''
+        else:
+            text_2 = util.norm_text(back_sel_col_name)
+        if text_1 != text_2:
+            return False
+        
+        sql_where_col_names = [util.norm_text(a['col_name']) for a in sql_meta_info['cond_info']]
+        back_where_columns = self.get_back_where_columns(back_meta_info)
+        sql_where_col_names.sort()
+        back_where_columns.sort()
+
+        if sql_where_col_names != back_where_columns:
+            return False
 
         return True
 
